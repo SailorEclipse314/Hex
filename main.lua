@@ -90,6 +90,8 @@ end
 -- to restore the normal limit once it's no longer owned.
 local HEX_POLY_DEFAULT_HAND_LIMIT = 5
 
+G.C.PINK = HEX("FF69B4")
+
 G.C.MYTHIC = HEX("1ABC9C")
 G.C.TRANSCENDENTAL = HEX("6817ff")
 G.C.DIVINE = HEX("ebb12a")
@@ -170,6 +172,9 @@ function loc_colour(_c, _default)
     end
     if _c == "black_hole" then
         return G.C.BLACK_HOLE
+    end
+    if _c == "pink" then
+        return G.C.PINK
     end
     return old_loc_colour(_c, _default)
 end
@@ -5951,6 +5956,427 @@ SMODS.Joker{
 }
 
 
+
+
+
+
+
+
+
+
+
+-- ============================================================
+-- New Spectral cards: Covenant / Oath / Prism / Forge / Shine /
+-- Enchant / Polish
+-- ============================================================
+
+-- Covenant: 1-in-4 chance to give a random editionless Joker one of this
+-- mod's own Prismatic/Brilliant/Chromatic editions -- same eligible-pool
+-- filter and pseudorandom_element pick Barnard's Star/Cigar Galaxy use
+-- elsewhere in this file, just gated behind a chance roll first (same
+-- reasoning as the "chance to X" pattern Tadpole Galaxy/Sculptor Galaxy
+-- use), and drawing from this trio of editions rather than Cigar
+-- Galaxy's own trio.
+SMODS.Consumable{
+    key = "covenant",
+    set = "Spectral",
+
+    atlas = "HexSpectrals",
+    pos = { x = 3, y = 2 },
+
+    unlocked = true,
+    discovered = true,
+
+    in_pool = function(self)
+        return true
+    end,
+
+    loc_txt = {
+        name = "Covenant",
+        text = {
+            "{C:green}1 in 4{} chance to give a",
+            "{C:attention}random{} Joker",
+            "{C:attention}without an Edition{}",
+            "{C:dark_edition}Prismatic{}, {C:dark_edition}Brilliant{},",
+            "or {C:dark_edition}Chromatic{}",
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        info_queue[#info_queue + 1] = G.P_CENTERS["e_" .. mod.prefix .. "_prismatic"]
+        info_queue[#info_queue + 1] = G.P_CENTERS["e_" .. mod.prefix .. "_brilliant"]
+        info_queue[#info_queue + 1] = G.P_CENTERS["e_" .. mod.prefix .. "_chromatic"]
+        return { vars = {} }
+    end,
+
+    can_use = function(self, card)
+        if not (G.jokers and G.jokers.cards) then return false end
+
+        for _, j in ipairs(G.jokers.cards) do
+            if not j.edition then
+                return true
+            end
+        end
+
+        return false
+    end,
+
+    use = function(self, card)
+        if pseudorandom(pseudoseed(mod.prefix .. "_covenant_chance")) < (1 / 4) then
+            if not (G.jokers and G.jokers.cards) then return end
+
+            local eligible = {}
+            for _, j in ipairs(G.jokers.cards) do
+                if not j.edition then
+                    eligible[#eligible + 1] = j
+                end
+            end
+
+            if not eligible[1] then return end
+
+            local chosen_joker = pseudorandom_element(
+                eligible,
+                pseudoseed(mod.prefix .. "_covenant_joker")
+            )
+
+            local editions = {
+                mod.prefix .. "_prismatic",
+                mod.prefix .. "_brilliant",
+                mod.prefix .. "_chromatic",
+            }
+            local chosen_edition = pseudorandom_element(
+                editions,
+                pseudoseed(mod.prefix .. "_covenant_edition")
+            )
+
+            chosen_joker:set_edition({ [chosen_edition] = true }, true)
+
+            card_eval_status_text(chosen_joker, "extra", nil, nil, nil, {
+                message = localize("k_upgrade_ex"),
+                colour = G.C.SECONDARY_SET.Spectral
+            })
+        else
+            card_eval_status_text(card, "extra", nil, nil, nil, {
+                message = "Nope",
+                colour = G.C.SECONDARY_SET.Spectral
+            })
+        end
+    end,
+}
+
+-- Oath: gives one selected playing card a Pink Seal. Same
+-- "select exactly one card from hand, then use" pattern Cappella/Pistol
+-- Star/Triangulum Galaxy already use above for their own seal grants.
+SMODS.Consumable{
+    key = "oath",
+    set = "Spectral",
+
+    atlas = "HexSpectrals",
+    pos = { x = 4, y = 2 },
+
+    unlocked = true,
+    discovered = true,
+
+    in_pool = function(self)
+        return true
+    end,
+
+    loc_txt = {
+        name = "Oath",
+        text = {
+            "Gives {C:attention}1{} selected",
+            "playing card a",
+            "{C:pink}Pink Seal{}",
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        info_queue[#info_queue + 1] = G.P_SEALS[mod.prefix .. "_pink"]
+        return { vars = {} }
+    end,
+
+    can_use = function(self, card)
+        return G.hand and G.hand.highlighted and #G.hand.highlighted == 1
+    end,
+
+    use = function(self, card)
+        if not (G.hand and G.hand.highlighted and G.hand.highlighted[1]) then return end
+
+        local target = G.hand.highlighted[1]
+        target:set_seal(mod.prefix .. "_pink", true)
+
+        card_eval_status_text(target, "extra", nil, nil, nil, {
+            message = "Pink Seal",
+            colour = G.C.SECONDARY_SET.Spectral
+        })
+    end,
+}
+
+-- Prism: 1-in-3 chance to give a selected playing card this mod's own
+-- Prismatic edition. Playing-card editions use Card:set_edition the same
+-- way Joker editions do elsewhere in this file, just targeting a single
+-- highlighted hand card instead of a Joker.
+SMODS.Consumable{
+    key = "prism",
+    set = "Spectral",
+
+    atlas = "HexSpectrals",
+    pos = { x = 5, y = 2 },
+
+    unlocked = true,
+    discovered = true,
+
+    in_pool = function(self)
+        return true
+    end,
+
+    loc_txt = {
+        name = "Prism",
+        text = {
+            "{C:green}1 in 3{} chance to give",
+            "{C:attention}1{} selected playing card",
+            "the {C:dark_edition}Prismatic{} edition",
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        info_queue[#info_queue + 1] = G.P_CENTERS["e_" .. mod.prefix .. "_prismatic"]
+        return { vars = {} }
+    end,
+
+    can_use = function(self, card)
+        return G.hand and G.hand.highlighted and #G.hand.highlighted == 1
+    end,
+
+    use = function(self, card)
+        if not (G.hand and G.hand.highlighted and G.hand.highlighted[1]) then return end
+
+        local target = G.hand.highlighted[1]
+
+        if pseudorandom(pseudoseed(mod.prefix .. "_prism_chance")) < (1 / 3) then
+            target:set_edition({ [mod.prefix .. "_prismatic"] = true }, true)
+
+            card_eval_status_text(target, "extra", nil, nil, nil, {
+                message = localize("k_upgrade_ex"),
+                colour = G.C.SECONDARY_SET.Spectral
+            })
+        else
+            card_eval_status_text(card, "extra", nil, nil, nil, {
+                message = "Nope",
+                colour = G.C.SECONDARY_SET.Spectral
+            })
+        end
+    end,
+}
+
+-- Forge: gives one selected playing card the Bronze enhancement, via
+-- Card:set_ability the same way Alcyoneus/Cartwheel Galaxy/Needle Galaxy
+-- above apply their own custom enhancements to a selected card.
+SMODS.Consumable{
+    key = "forge",
+    set = "Spectral",
+
+    atlas = "HexSpectrals",
+    pos = { x = 6, y = 2 },
+
+    unlocked = true,
+    discovered = true,
+
+    in_pool = function(self)
+        return true
+    end,
+
+    loc_txt = {
+        name = "Forge",
+        text = {
+            "Gives {C:attention}1{} selected",
+            "playing card the",
+            "{C:attention}Bronze{} enhancement",
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        info_queue[#info_queue + 1] = G.P_CENTERS["m_" .. mod.prefix .. "_bronze"]
+        return { vars = {} }
+    end,
+
+    can_use = function(self, card)
+        return G.hand and G.hand.highlighted and #G.hand.highlighted == 1
+    end,
+
+    use = function(self, card)
+        if not (G.hand and G.hand.highlighted and G.hand.highlighted[1]) then return end
+
+        local target = G.hand.highlighted[1]
+        target:set_ability(G.P_CENTERS["m_" .. mod.prefix .. "_bronze"])
+
+        card_eval_status_text(target, "extra", nil, nil, nil, {
+            message = "Bronze!",
+            colour = G.C.SECONDARY_SET.Spectral
+        })
+    end,
+}
+
+-- Shine: 1-in-2 chance to give a selected playing card this mod's own
+-- Brilliant edition. Same pattern as Prism above, just Brilliant instead
+-- of Prismatic and 1-in-2 odds instead of 1-in-3.
+SMODS.Consumable{
+    key = "shine",
+    set = "Spectral",
+
+    atlas = "HexSpectrals",
+    pos = { x = 7, y = 2 },
+
+    unlocked = true,
+    discovered = true,
+
+    in_pool = function(self)
+        return true
+    end,
+
+    loc_txt = {
+        name = "Shine",
+        text = {
+            "{C:green}1 in 2{} chance to give",
+            "{C:attention}1{} selected playing card",
+            "the {C:dark_edition}Brilliant{} edition",
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        info_queue[#info_queue + 1] = G.P_CENTERS["e_" .. mod.prefix .. "_brilliant"]
+        return { vars = {} }
+    end,
+
+    can_use = function(self, card)
+        return G.hand and G.hand.highlighted and #G.hand.highlighted == 1
+    end,
+
+    use = function(self, card)
+        if not (G.hand and G.hand.highlighted and G.hand.highlighted[1]) then return end
+
+        local target = G.hand.highlighted[1]
+
+        if pseudorandom(pseudoseed(mod.prefix .. "_shine_chance")) < (1 / 2) then
+            target:set_edition({ [mod.prefix .. "_brilliant"] = true }, true)
+
+            card_eval_status_text(target, "extra", nil, nil, nil, {
+                message = localize("k_upgrade_ex"),
+                colour = G.C.SECONDARY_SET.Spectral
+            })
+        else
+            card_eval_status_text(card, "extra", nil, nil, nil, {
+                message = "Nope",
+                colour = G.C.SECONDARY_SET.Spectral
+            })
+        end
+    end,
+}
+
+-- Enchant: gives one selected playing card this mod's own Chromatic
+-- edition, guaranteed -- no chance roll, unlike Prism/Shine above.
+SMODS.Consumable{
+    key = "enchant",
+    set = "Spectral",
+
+    atlas = "HexSpectrals",
+    pos = { x = 8, y = 2 },
+
+    unlocked = true,
+    discovered = true,
+
+    in_pool = function(self)
+        return true
+    end,
+
+    loc_txt = {
+        name = "Enchant",
+        text = {
+            "Gives {C:attention}1{} selected",
+            "playing card the",
+            "{C:dark_edition}Chromatic{} edition",
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        info_queue[#info_queue + 1] = G.P_CENTERS["e_" .. mod.prefix .. "_chromatic"]
+        return { vars = {} }
+    end,
+
+    can_use = function(self, card)
+        return G.hand and G.hand.highlighted and #G.hand.highlighted == 1
+    end,
+
+    use = function(self, card)
+        if not (G.hand and G.hand.highlighted and G.hand.highlighted[1]) then return end
+
+        local target = G.hand.highlighted[1]
+        target:set_edition({ [mod.prefix .. "_chromatic"] = true }, true)
+
+        card_eval_status_text(target, "extra", nil, nil, nil, {
+            message = localize("k_upgrade_ex"),
+            colour = G.C.SECONDARY_SET.Spectral
+        })
+    end,
+}
+
+-- Polish: gives one selected playing card the Topaz enhancement, but
+-- costs $25 to use -- deducted the same OmegaNum-safe way every other
+-- money change in this file goes through (to_big/big, matching
+-- ease_dollars's own arithmetic). can_use checks both the card-selection
+-- requirement and that at least $25 is currently available, so the card
+-- greys out in the consumable-use menu if either isn't met.
+SMODS.Consumable{
+    key = "polish",
+    set = "Spectral",
+
+    atlas = "HexSpectrals",
+    pos = { x = 9, y = 2 },
+
+    unlocked = true,
+    discovered = true,
+
+    in_pool = function(self)
+        return true
+    end,
+
+    loc_txt = {
+        name = "Polish",
+        text = {
+            "Gives {C:attention}1{} selected",
+            "playing card the",
+            "{C:attention}Topaz{} enhancement",
+            "{C:inactive}(Costs {C:money}$25{C:inactive} to use){}",
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        info_queue[#info_queue + 1] = G.P_CENTERS["m_" .. mod.prefix .. "_topaz"]
+        return { vars = {} }
+    end,
+
+    can_use = function(self, card)
+        if not (G.hand and G.hand.highlighted and #G.hand.highlighted == 1) then
+            return false
+        end
+        return to_big(G.GAME.dollars or 0):gte(big(25))
+    end,
+
+    use = function(self, card)
+        if not (G.hand and G.hand.highlighted and G.hand.highlighted[1]) then return end
+        if to_big(G.GAME.dollars or 0):lt(big(25)) then return end
+
+        G.GAME.dollars = to_big(G.GAME.dollars or 0):sub(big(25))
+
+        local target = G.hand.highlighted[1]
+        target:set_ability(G.P_CENTERS["m_" .. mod.prefix .. "_topaz"])
+
+        card_eval_status_text(target, "extra", nil, nil, nil, {
+            message = "Topaz!",
+            colour = G.C.SECONDARY_SET.Spectral
+        })
+    end,
+}
 
 
 
