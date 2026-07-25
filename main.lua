@@ -772,7 +772,7 @@ local function hex_set_hand_stat(hand_key, stat, new_value)
 
     if HEX_DYNAMIC_N_HAND_KEYS[hand_key] then
         local old_big = to_big(old_value or 0)
-        if old_big > big(0) then
+        if old_big:gt(big(0)) then
             local ratio = to_big(new_value) / old_big
             G.GAME.hex_dynamic_hand_mult = G.GAME.hex_dynamic_hand_mult or {}
             G.GAME.hex_dynamic_hand_mult[hand_key] = G.GAME.hex_dynamic_hand_mult[hand_key] or {}
@@ -825,8 +825,8 @@ local function hex_apply_dynamic_n_hand(key, n, chips_per_n, mult_per_n)
 
     local bonus = (G.GAME.hex_dynamic_hand_mult and G.GAME.hex_dynamic_hand_mult[key]) or {}
 
-    hand_info.chips = to_big(base_chips) * (bonus.chips or big(1))
-    hand_info.mult = to_big(base_mult) * (bonus.mult or big(1))
+    hand_info.chips = to_big(base_chips):mul(bonus.chips or big(1))
+    hand_info.mult = to_big(base_mult):mul(bonus.mult or big(1))
 end
 
 
@@ -1032,7 +1032,7 @@ local function hex_planet_apply_stat(hand_key, stat, op, factor)
     if not current then return end
 
     if op == "mult" then
-        hex_set_hand_stat(hand_key, stat, to_big(current) * big(factor))
+        hex_set_hand_stat(hand_key, stat, to_big(current):mul(big(factor))) -- CHANGED: was * big(factor)
     elseif op == "pow" then
         hex_set_hand_stat(hand_key, stat, to_big(current):arrow(1, factor))
     elseif op == "tetrate" then
@@ -5277,7 +5277,7 @@ SMODS.Joker{
         -- Grow permanently whenever a scored card has the Bonus enhancement
         if context.individual and context.cardarea == G.play and not context.blueprint then
             if context.other_card.config.center.key == "m_bonus" then
-                card.ability.extra.Xmult = card.ability.extra.Xmult + card.ability.extra.Xmult_gain
+                card.ability.extra.Xmult = card.ability.extra.Xmult:add(card.ability.extra.Xmult_gain) 
                 return {
                     message = localize("k_upgrade_ex"),
                     colour = G.C.MULT,
@@ -5348,7 +5348,7 @@ SMODS.Joker{
         and context.card.config.center.rarity == 3 then
 
             card.ability.extra.xmult =
-                card.ability.extra.xmult * big(1.5)
+                card.ability.extra.xmult:mul(big(1.5))
 
             return {
                 message = "X" .. tostring(card.ability.extra.xmult),
@@ -5478,7 +5478,7 @@ SMODS.Joker{
 
             card.ability.extra.exponent =
                 (card.ability.extra.exponent or big(1))
-                + (card.ability.extra.exponent_gain or big(0.01))
+                :add(card.ability.extra.exponent_gain or big(0.01))
 
             return {
                 message = "Upgrade",
@@ -6829,7 +6829,7 @@ SMODS.Consumable{
     end,
 
     use = function(self, card)
-        G.GAME.hex_points = (G.GAME.hex_points or big(0)) + big(12)
+        G.GAME.hex_points = (G.GAME.hex_points or big(0)):add(big(12))  -- Deneb, CHANGED
 
         card_eval_status_text(card, "extra", nil, nil, nil, {
             message = "+12 Hex",
@@ -7463,7 +7463,7 @@ function add_round_eval_row(config)
         if bonus > 0 then
             G.GAME.hex_cash_out_paid_round = G.GAME.round
             config.dollars = to_big(config.dollars or 0):add(big(bonus))
-            
+
             if rigil_bonus > 0 then
                 hex_old_add_round_eval_row({
                     name = 'joker_hex_rigil_kentaurus',
@@ -9682,7 +9682,7 @@ SMODS.Consumable{
     end,
 
     use = function(self, card)
-        G.GAME.hex_points = (G.GAME.hex_points or big(0)) + big(300)
+        G.GAME.hex_points = (G.GAME.hex_points or big(0)):add(big(300)) -- White Dwarf, CHANGED
 
         G.GAME.round_resets.hand_size = math.max(1, (G.GAME.round_resets.hand_size or 8) - 2)
         G.GAME.round_resets.hands = math.max(1, (G.GAME.round_resets.hands or 4) - 2)
@@ -9881,7 +9881,7 @@ SMODS.Consumable{
     end,
 
     use = function(self, card)
-        G.GAME.hex_points = (G.GAME.hex_points or big(0)) + big(75)
+        G.GAME.hex_points = (G.GAME.hex_points or big(0)):add(big(75))  -- Boson Star, CHANGED
 
         card_eval_status_text(card, "extra", nil, nil, nil, {
             message = "+75 Hex",
@@ -10160,18 +10160,18 @@ local function hex_compute_sacrifice_gain(card)
     local rarity = card.config.center.rarity
     local gain = hex_sacrifice_values[rarity] or big(0)
 
-    if gain > big(0) then
+    if gain:gt(big(0)) then
         if G.GAME and G.GAME.hex_laniakea_used then
-            gain = gain * big(2)
+            gain = gain:mul(big(2))
         end
 
         if hex_cursed_deck_selected() then
-            gain = gain * big(2)
+            gain = gain:mul(big(2))
         end
 
         local monolith_count = #SMODS.find_card("j_" .. mod.prefix .. "_the_monolith")
         if monolith_count > 0 then
-            gain = gain + big(monolith_count)
+            gain = gain:add(big(monolith_count)) 
         end
     end
 
@@ -10403,12 +10403,9 @@ SMODS.Consumable{
         local current = (G.GAME and G.GAME.hex_points) or big(0)
         local cap = big(303)
 
-        local gain = current
-        if current > cap then
-            gain = cap
-        end
+        local gain = current:min(cap)
 
-        G.GAME.hex_points = current + gain
+        G.GAME.hex_points = current:add(gain)
 
         card_eval_status_text(card, "extra", nil, nil, nil, {
             message = "+" .. tostring(gain) .. " Hex",
@@ -10479,7 +10476,7 @@ SMODS.Consumable{
             }))
         end
 
-        G.GAME.hex_points = (G.GAME.hex_points or big(0)) + big(1000)
+        G.GAME.hex_points = (G.GAME.hex_points or big(0)):add(big(1000)) -- Giant GRB Ring, CHANGED
 
         card_eval_status_text(card, "extra", nil, nil, nil, {
             message = "+1000 Hex",
@@ -10549,11 +10546,11 @@ SMODS.Consumable{
         -- X50 is applied AFTER Cursed Deck's double and Monolith's flat
         -- bonus, since hex_compute_sacrifice_gain already folds both of
         -- those in before returning.
-        local gain = hex_compute_sacrifice_gain(chosen) * big(50)
+        local gain = hex_compute_sacrifice_gain(chosen):mul(big(50)) -- CHANGED: was * big(50)
 
-        if gain > big(0) then
-            G.GAME.hex_points = (G.GAME.hex_points or big(0)) + gain
-
+        if gain:gt(big(0)) then -- CHANGED: was gain > big(0)
+            G.GAME.hex_points = (G.GAME.hex_points or big(0)):add(gain) -- CHANGED: was + gain
+            
             card_eval_status_text(chosen, "extra", nil, nil, nil, {
                 message = "+" .. tostring(gain) .. " Hex",
                 colour = G.C.COSMIC
@@ -11206,7 +11203,7 @@ if SMODS.Scoring_Calculation then
                 -- Not yet upgraded (shouldn't normally be reached, since we
                 -- only switch to this calculation once level >= 1) — fall
                 -- back to ordinary multiplication.
-                return big(chips) * big(mult)
+                return big(chips):mul(big(mult)) -- CHANGED: was big(chips) * big(mult)
             end
 
             -- level 1 -> arrow(1) = ^, level 1 -> arrow(1) = ^^, etc.
@@ -13304,8 +13301,8 @@ G.FUNCS.hex_sacrifice = function(e)
 
     local gain = hex_compute_sacrifice_gain(card)
 
-    if gain > big(0) then
-        G.GAME.hex_points = (G.GAME.hex_points or big(0)) + gain
+    if gain:gt(big(0)) then -- CHANGED: was gain > big(0)
+        G.GAME.hex_points = (G.GAME.hex_points or big(0)):add(gain) -- CHANGED: was + gain        
         card_eval_status_text(card, "extra", nil, nil, nil, {
             message = "+" .. tostring(gain) .. " Hex",
             colour = G.C.HEX_ORPLE
@@ -13375,7 +13372,7 @@ G.FUNCS.create_ritual = function()
     if not G.GAME then return end
 
 
-    if (G.GAME.hex_points or big(0)) < big(100) then
+    if (G.GAME.hex_points or big(0)):lt(big(100)) then
         return
     end
 
@@ -13433,7 +13430,7 @@ G.FUNCS.create_ritual = function()
         G.GAME.hex_rituals_summoned[chosen_key] = true
     end
 
-    G.GAME.hex_points = G.GAME.hex_points - big(100)
+    G.GAME.hex_points = G.GAME.hex_points:sub(big(100)) -- CHANGED: was - big(100)
 
 
     G.E_MANAGER:add_event(Event({
@@ -13473,7 +13470,7 @@ G.FUNCS.summon_transcendental = function()
 
     local cost = big(1000)
 
-    if (G.GAME.hex_points or big(0)) < cost then
+    if (G.GAME.hex_points or big(0)):lt(cost) then -- CHANGED: was < cost
         return
     end
 
@@ -13502,7 +13499,7 @@ G.FUNCS.summon_transcendental = function()
         pseudoseed("transcendental")
     )
 
-    G.GAME.hex_points = G.GAME.hex_points - cost
+    G.GAME.hex_points = G.GAME.hex_points:sub(cost) -- CHANGED: was - cost
 
     G.E_MANAGER:add_event(Event({
         trigger = "after",
@@ -13532,7 +13529,7 @@ G.FUNCS.summon_divine = function()
 
     local cost = big(10000)
 
-    if (G.GAME.hex_points or big(0)) < cost then
+    if (G.GAME.hex_points or big(0)):lt(cost) then
         return
     end
 
@@ -13562,7 +13559,7 @@ G.FUNCS.summon_divine = function()
         pseudoseed("divine")
     )
 
-    G.GAME.hex_points = G.GAME.hex_points - cost
+    G.GAME.hex_points = G.GAME.hex_points:sub(cost)
 
     G.E_MANAGER:add_event(Event({
         trigger = "after",
@@ -13605,7 +13602,7 @@ G.FUNCS.summon_absolute = function()
 
     local cost = big(1.0e21)
 
-    if (G.GAME.hex_points or big(0)) < cost then
+    if (G.GAME.hex_points or big(0)):lt(cost) then -- CHANGED: was < cost
         return
     end
 
@@ -13624,8 +13621,8 @@ G.FUNCS.summon_absolute = function()
     -- above; Hex points reuse `big(0)` the same way every other
     -- point-granting deck hook in this file already does.
     G.GAME.hex_points = big(0)
-    G.GAME.dollars = 0
-
+    G.GAME.dollars = big(0) -- CHANGED: was plain 0 -- dollars is OmegaNum now, so this needs to be a big value too, not a plain Lua number
+    
     G.E_MANAGER:add_event(Event({
         trigger = "after",
         delay = 0.1,
@@ -14023,7 +14020,7 @@ function ease_dollars(mod, instant)
         local text = '+'..localize('$')
         local col = G.C.MONEY
 
-        if mod < big(0) then
+        if mod:lt(big(0)) then
             text = '-'..localize('$')
             col = G.C.RED
         else
@@ -14045,7 +14042,7 @@ function ease_dollars(mod, instant)
         dollar_UI.config.object:update()
         G.HUD:recalculate()
 
-        local abs_mod = (mod < big(0)) and (big(0) - mod) or mod
+        local abs_mod = mod:abs()
 
         attention_text({
           text = text..hex_format_dollars(abs_mod),
@@ -14132,7 +14129,7 @@ G.FUNCS.evaluate_round = function()
             dollars = dollars + big(ret.dollars) -- CHANGED
         end
     end
-    if G.GAME.dollars >= big(5) and not G.GAME.modifiers.no_interest then -- CHANGED: big(5), relies on OmegaNum's own >= metamethod
+    if G.GAME.dollars:gte(big(5)) and not G.GAME.modifiers.no_interest then -- CHANGED: big(5), relies on OmegaNum's own >= metamethod
         -- CHANGED: down-cast G.GAME.dollars to a plain number just for this
         -- ratio -- always saturates safely via math.min against
         -- interest_cap/5 even at absurd OmegaNum balances (hex_to_plain_number
