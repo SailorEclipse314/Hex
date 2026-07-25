@@ -1042,6 +1042,16 @@ end
 
 -- args: key, name, hand_key, levels, atlas, pos, text
 local function hex_make_level_planet(args)
+    -- Only planets targeting one of THIS mod's own custom poker hands
+    -- (three pair, dual three of a kind, grand house, N of a Kind, etc.
+    -- -- every custom SMODS.PokerHand key in this file is prefixed with
+    -- mod.prefix) get a Telescope-matchable hand_type. The vanilla-hand
+    -- reuses of this same factory (Full House, Flush, Straight, Two Pair,
+    -- Straight Flush, High Card, Flush Five, Flush House) are left with
+    -- no config at all, so Telescope keeps picking vanilla's own real
+    -- Planet card for those hands exactly as before.
+    local is_custom_hand = tostring(args.hand_key):sub(1, #(mod.prefix .. "_")) == (mod.prefix .. "_")
+
     SMODS.Consumable{
         key = args.key,
         set = "Planet",
@@ -1057,6 +1067,11 @@ local function hex_make_level_planet(args)
         in_pool = function(self) return true end,
         in_pool = args.in_pool or function(self) return true end,
 
+        -- CHANGED: stamps hand_type so vanilla Telescope's own search
+        -- (`v.config.hand_type == _hand`) can find this card when the
+        -- player's most-played hand is this custom poker hand.
+        config = is_custom_hand and { hand_type = args.hand_key } or nil,
+
         loc_txt = {
             name = args.name,
             text = args.text,
@@ -1067,10 +1082,6 @@ local function hex_make_level_planet(args)
         end,
 
         use = function(self, card)
-            -- bypass_visual = nil lets vanilla's own level-up popup play,
-            -- same as Vega's own call above; the extra card_eval_status_text
-            -- below matches Vega's own redundant-but-established pattern
-            -- of also showing our own confirmation message.
             level_up_hand(card, args.hand_key, nil, args.levels)
 
             card_eval_status_text(card, "extra", nil, nil, nil, {
@@ -1880,7 +1891,7 @@ hex_make_level_planet{
     key = "quaoar",
     name = "Quaoar",
     hand_key = mod.prefix .. "_dual_three_of_a_kind",
-    levels = 2,
+    levels = 1,
     weight = 0.1,
     set_badges = function(self, card, badges)
         badges[1] = create_badge("Dwarf Planet", G.C.SECONDARY_SET["Planet"], nil, 1.2)
@@ -1890,7 +1901,7 @@ hex_make_level_planet{
     in_pool = hex_hand_played_check(mod.prefix .. "_dual_three_of_a_kind"),
     text = {
         "Upgrades {C:attention}Dual Three",
-        "of a Kind{} by {C:attention}2{} levels",
+        "of a Kind{} by {C:attention}1{} level",
     },
 }
 
@@ -1898,7 +1909,7 @@ hex_make_level_planet{
     key = "makemake",
     name = "Makemake",
     hand_key = mod.prefix .. "_flush_dual_three_of_a_kind",
-    levels = 2,
+    levels = 1,
     weight = 0.1,
     set_badges = function(self, card, badges)
         badges[1] = create_badge("Dwarf Planet", G.C.SECONDARY_SET["Planet"], nil, 1.2)
@@ -1908,7 +1919,7 @@ hex_make_level_planet{
     in_pool = hex_hand_played_check(mod.prefix .. "_flush_dual_three_of_a_kind"),
     text = {
         "Upgrades {C:attention}Flush Dual Three",
-        "of a Kind{} by {C:attention}2{} levels",
+        "of a Kind{} by {C:attention}1{} level",
     },
 }
 
@@ -1916,7 +1927,7 @@ hex_make_level_planet{
     key = "gonggong",
     name = "Gonggong",
     hand_key = mod.prefix .. "_grand_house",
-    levels = 2,
+    levels = 1,
     weight = 0.1,
     set_badges = function(self, card, badges)
         badges[1] = create_badge("Dwarf Planet", G.C.SECONDARY_SET["Planet"], nil, 1.2)
@@ -1926,7 +1937,7 @@ hex_make_level_planet{
     in_pool = hex_hand_played_check(mod.prefix .. "_grand_house"),
     text = {
         "Upgrades {C:attention}Grand House{}",
-        "by {C:attention}2{} levels",
+        "by {C:attention}1{} level",
     },
 }
 
@@ -1934,7 +1945,7 @@ hex_make_level_planet{
     key = "sedna",
     name = "Sedna",
     hand_key = mod.prefix .. "_flush_grand_house",
-    levels = 2,
+    levels = 1,
     weight = 0.1,
     set_badges = function(self, card, badges)
         badges[1] = create_badge("Dwarf Planet", G.C.SECONDARY_SET["Planet"], nil, 1.2)
@@ -1944,7 +1955,7 @@ hex_make_level_planet{
     in_pool = hex_hand_played_check(mod.prefix .. "_flush_grand_house"),
     text = {
         "Upgrades {C:attention}Flush Grand House{}",
-        "by {C:attention}2{} levels",
+        "by {C:attention}1{} level",
     },
 }
 
@@ -1952,7 +1963,7 @@ hex_make_level_planet{
     key = "comet_shoemaker_levy_9",
     name = "Comet Shoemaker-Levy 9",
     hand_key = mod.prefix .. "_three_pair",
-    levels = 2,
+    levels = 1,
     weight = 0.1,
     set_badges = function(self, card, badges)
         badges[1] = create_badge("Comet", G.C.SECONDARY_SET["Planet"], nil, 1.2)
@@ -1962,7 +1973,7 @@ hex_make_level_planet{
     in_pool = hex_hand_played_check(mod.prefix .. "_three_pair"),
     text = {
         "Upgrades {C:attention}Three Pair{}",
-        "by {C:attention}2{} levels",
+        "by {C:attention}1{} level",
     },
 }
 
@@ -1970,7 +1981,7 @@ hex_make_level_planet{
     key = "hale_bopp_comet",
     name = "Hale-Bopp Comet",
     hand_key = mod.prefix .. "_four_pair",
-    levels = 2,
+    levels = 1,
     weight = 0.1,
     set_badges = function(self, card, badges)
         badges[1] = create_badge("Comet", G.C.SECONDARY_SET["Planet"], nil, 1.2)
@@ -1980,7 +1991,7 @@ hex_make_level_planet{
     in_pool = hex_hand_played_check(mod.prefix .. "_four_pair"),
     text = {
         "Upgrades {C:attention}Four Pair{}",
-        "by {C:attention}2{} levels",
+        "by {C:attention}1{} level",
     },
 }
 
@@ -1988,7 +1999,7 @@ hex_make_level_planet{
     key = "oumuamua",
     name = "Oumuamua",
     hand_key = mod.prefix .. "_flush_three_pair",
-    levels = 2,
+    levels = 1,
     weight = 0.1,
     set_badges = function(self, card, badges)
         badges[1] = create_badge("Comet", G.C.SECONDARY_SET["Planet"], nil, 1.2)
@@ -1998,7 +2009,7 @@ hex_make_level_planet{
     in_pool = hex_hand_played_check(mod.prefix .. "_flush_three_pair"),
     text = {
         "Upgrades {C:attention}Flush Three Pair{}",
-        "by {C:attention}2{} levels",
+        "by {C:attention}1{} level",
     },
 }
 
@@ -2006,7 +2017,7 @@ hex_make_level_planet{
     key = "comet_lovejoy",
     name = "Comet Lovejoy",
     hand_key = mod.prefix .. "_flush_four_pair",
-    levels = 2,
+    levels = 1,
     set_badges = function(self, card, badges)
         badges[1] = create_badge("Comet", G.C.SECONDARY_SET["Planet"], nil, 1.2)
     end,
@@ -2016,7 +2027,7 @@ hex_make_level_planet{
     in_pool = hex_hand_played_check(mod.prefix .. "_flush_four_pair"),
     text = {
         "Upgrades {C:attention}Flush Four Pair{}",
-        "by {C:attention}2{} levels",
+        "by {C:attention}1{} level",
     },
 }
 
@@ -2024,7 +2035,7 @@ hex_make_level_planet{
     key = "bennu",
     name = "Bennu",
     hand_key = mod.prefix .. "_n_of_a_kind",
-    levels = 2,
+    levels = 1,
     set_badges = function(self, card, badges)
         badges[1] = create_badge("Comet", G.C.SECONDARY_SET["Planet"], nil, 1.2)
     end,
@@ -2034,7 +2045,7 @@ hex_make_level_planet{
     in_pool = hex_hand_played_check(mod.prefix .. "_n_of_a_kind"),
     text = {
         "Upgrades {C:attention}N of a Kind{}",
-        "by {C:attention}2{} levels",
+        "by {C:attention}1{} level",
     },
 }
 
@@ -2042,7 +2053,7 @@ hex_make_level_planet{
     key = "arrokoth",
     name = "Arrokoth",
     hand_key = mod.prefix .. "_flush_n",
-    levels = 2,
+    levels = 1,
     weight = 0.1,
     set_badges = function(self, card, badges)
         badges[1] = create_badge("Comet", G.C.SECONDARY_SET["Planet"], nil, 1.2)
@@ -2052,7 +2063,7 @@ hex_make_level_planet{
     in_pool = hex_hand_played_check(mod.prefix .. "_flush_n"),
     text = {
         "Upgrades {C:attention}Flush N{}",
-        "by {C:attention}2{} levels",
+        "by {C:attention}1{} level",
     },
 }
 
@@ -2075,6 +2086,11 @@ SMODS.Consumable{
         badges[1] = create_badge("Comet", G.C.SECONDARY_SET["Planet"], nil, 1.2)
     end,
 
+    -- CHANGED: added so Telescope's own search (`v.config.hand_type ==
+    -- _hand`) can find this card when the player's most-played hand is
+    -- "None" (0 cards played) -- same reasoning as hex_make_level_planet's
+    -- own hand_type stamp above.
+    config = { hand_type = mod.prefix .. "_none" },
 
     in_pool = function(self) return true end,
 
@@ -2105,7 +2121,7 @@ SMODS.Consumable{
 
         card_eval_status_text(card, "extra", nil, nil, nil, {
             message = "+1 Chips/Mult",
-            colour = G.C.STAR
+            colour = G.C.BLUE
         })
     end,
 }
@@ -4217,7 +4233,7 @@ SMODS.Back{
         name = "Black Hole Deck",
         text = {
             "Start with a random",
-            "{C:blue}Black Hole{} card",
+            "{C:black_hole}Black Hole{} card",
         }
     },
 
@@ -13622,7 +13638,7 @@ G.FUNCS.summon_absolute = function()
     -- point-granting deck hook in this file already does.
     G.GAME.hex_points = big(0)
     G.GAME.dollars = big(0) -- CHANGED: was plain 0 -- dollars is OmegaNum now, so this needs to be a big value too, not a plain Lua number
-    
+
     G.E_MANAGER:add_event(Event({
         trigger = "after",
         delay = 0.1,
@@ -14322,6 +14338,156 @@ function add_round_eval_row(config)
         }))
     end
 end
+
+
+
+
+
+-- Redeemed-vouchers Run Info tab: vanilla's own G.UIDEF.used_vouchers has
+-- no paging -- once enough base/upgrade voucher pairs have been redeemed
+-- in a run (all 32 vouchers = 16 pairs), the areas overflow past 5-per-
+-- row/2-rows and run off the edge of the panel. This adds paging, the
+-- same persistent-CardArea + create_option_cycle rebuild pattern already
+-- used for Life/Manifest and the vanilla Collection Vouchers tab
+-- (create_UIBox_your_collection_vouchers) elsewhere in this file.
+local HEX_USED_VOUCHERS_PER_PAGE = 10 -- matches vanilla's own row-break/shrink threshold (5 per row, 2 rows)
+
+-- Builds the flat list of base/upgrade voucher pairs that have at least
+-- one redeemed voucher this run -- same grouping vanilla's own function
+-- used (key = 1 + floor((k-1)/2) groups each tier-1/tier-2 pair together).
+local function hex_get_used_voucher_pairs()
+    local keys_used = {}
+    for k, v in ipairs(G.P_CENTER_POOLS["Voucher"]) do
+        local key = 1 + math.floor((k - 0.1) / 2)
+        keys_used[key] = keys_used[key] or {}
+        if G.GAME.used_vouchers[v.key] then
+            keys_used[key][#keys_used[key] + 1] = v
+        end
+    end
+
+    local pairs_list = {}
+    for k, v in ipairs(keys_used) do
+        if next(v) then
+            pairs_list[#pairs_list + 1] = v
+        end
+    end
+
+    return pairs_list
+end
+
+local function hex_used_vouchers_rebuild_page(current_option)
+    if not G.hex_used_voucher_areas then return end
+
+    local all_pairs = hex_get_used_voucher_pairs()
+    local start_index = (current_option - 1) * HEX_USED_VOUCHERS_PER_PAGE
+
+    for _, area in ipairs(G.hex_used_voucher_areas) do
+        for i = #area.cards, 1, -1 do
+            local c = area:remove_card(area.cards[i])
+            if c then c:remove() end
+        end
+    end
+
+    local silent = false
+    for area_idx = 1, #G.hex_used_voucher_areas do
+        local pair = all_pairs[start_index + area_idx]
+        if pair then
+            local area = G.hex_used_voucher_areas[area_idx]
+            for _, vv in ipairs(pair) do
+                local center = G.P_CENTERS[vv.key]
+                local card = Card(area.T.x + area.T.w / 2, area.T.y, G.CARD_W, G.CARD_H, nil, center, {bypass_discovery_center = true, bypass_discovery_ui = true, bypass_lock = true})
+                card.ability.order = vv.order
+                card:start_materialize(nil, silent)
+                silent = true
+                area:emplace(card)
+            end
+        end
+    end
+end
+
+G.FUNCS.hex_used_vouchers_page_change = function(args)
+    if not args or not args.cycle_config then return end
+    hex_used_vouchers_rebuild_page(args.cycle_config.current_option)
+end
+
+function G.UIDEF.used_vouchers()
+
+    local all_pairs = hex_get_used_voucher_pairs()
+
+    if not next(all_pairs) then
+        return {n=G.UIT.ROOT, config={align = "cm", colour = G.C.CLEAR}, nodes={
+            {n=G.UIT.O, config={object = DynaText({string = {localize('ph_no_vouchers')}, colours = {G.C.UI.TEXT_LIGHT}, bump = true, scale = 0.6})}}
+        }}
+    end
+
+    local per_page = HEX_USED_VOUCHERS_PER_PAGE
+    local pages = math.max(1, math.ceil(#all_pairs / per_page))
+    local area_count = math.min(per_page, #all_pairs)
+
+    G.hex_used_voucher_areas = {}
+    local voucher_tables = {}
+    local voucher_table_rows = {}
+
+    for i = 1, area_count do
+        local pair = all_pairs[i]
+        if #G.hex_used_voucher_areas == 5 then
+            table.insert(voucher_table_rows,
+                {n=G.UIT.R, config={align = "cm", padding = 0, no_fill = true}, nodes=voucher_tables}
+            )
+            voucher_tables = {}
+        end
+
+        G.hex_used_voucher_areas[#G.hex_used_voucher_areas + 1] = CardArea(
+            G.ROOM.T.x + 0.2*G.ROOM.T.w/2, G.ROOM.T.h,
+            (#pair == 1 and 1 or 1.33)*G.CARD_W,
+            (area_count >= 10 and 0.75 or 1.07)*G.CARD_H,
+            {card_limit = 2, type = 'voucher', highlight_limit = 0})
+
+        table.insert(voucher_tables,
+            {n=G.UIT.C, config={align = "cm", padding = 0, no_fill = true}, nodes={
+                {n=G.UIT.O, config={object = G.hex_used_voucher_areas[#G.hex_used_voucher_areas]}}
+            }}
+        )
+    end
+    table.insert(voucher_table_rows,
+        {n=G.UIT.R, config={align = "cm", padding = 0, no_fill = true}, nodes=voucher_tables}
+    )
+
+    hex_used_vouchers_rebuild_page(1)
+
+    local page_options = {}
+    for i = 1, pages do
+        page_options[#page_options + 1] = localize('k_page')..' '..tostring(i)..'/'..tostring(pages)
+    end
+
+    local nodes = {
+        {n=G.UIT.R, config={align = "cm"}, nodes={
+            {n=G.UIT.O, config={object = DynaText({string = {localize('ph_vouchers_redeemed')}, colours = {G.C.UI.TEXT_LIGHT}, bump = true, scale = 0.6})}}
+        }},
+        {n=G.UIT.R, config={align = "cm", minh = 0.5}, nodes={}},
+        {n=G.UIT.R, config={align = "cm", colour = G.C.BLACK, r = 1, padding = 0.15, emboss = 0.05}, nodes={
+            {n=G.UIT.R, config={align = "cm"}, nodes=voucher_table_rows},
+        }}
+    }
+
+    if pages > 1 then
+        table.insert(nodes, {n=G.UIT.R, config={align = "cm", padding = 0.1}, nodes={
+            create_option_cycle({
+                options = page_options,
+                w = 4.5,
+                cycle_shoulders = true,
+                opt_callback = 'hex_used_vouchers_page_change',
+                current_option = 1,
+                colour = G.C.RED,
+                no_pips = true,
+                focus_args = {snap_to = true, nav = 'wide'},
+            })
+        }})
+    end
+
+    return {n=G.UIT.ROOT, config={align = "cm", colour = G.C.CLEAR}, nodes=nodes}
+end
+
 
 
 
