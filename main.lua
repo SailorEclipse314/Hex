@@ -3499,6 +3499,111 @@ SMODS.Voucher{
 }
 
 
+SMODS.Voucher{
+    key = "big_box",
+
+    loc_txt = {
+        name = "Big Box",
+        text = {
+            "Booster Packs have",
+            "{C:attention}+1{} more option",
+            "{C:inactive}(Stacks with other ways{}",
+            "{C:inactive}to get more options){}",
+        }
+    },
+
+    atlas = "HexVouchers",
+    pos = { x = 7, y = 0 },
+
+    unlocked = true,
+    discovered = true,
+
+    redeem = function(self, card)
+        G.GAME.hex_bigbox_bonus = (G.GAME.hex_bigbox_bonus or 0) + 1
+    end,
+}
+
+SMODS.Voucher{
+    key = "giant_box",
+
+    loc_txt = {
+        name = "Giant Box",
+        text = {
+            "Booster Packs have",
+            "{C:attention}+1{} more option",
+            "{C:inactive}(Stacks with other ways{}",
+            "{C:inactive}to get more options){}",
+        }
+    },
+
+    atlas = "HexVouchers",
+    pos = { x = 7, y = 0 },
+
+    requires = { "v_" .. mod.prefix .. "_big_box" },
+
+    unlocked = true,
+    discovered = true,
+
+    redeem = function(self, card)
+        G.GAME.hex_bigbox_bonus = (G.GAME.hex_bigbox_bonus or 0) + 1
+    end,
+}
+
+
+SMODS.Voucher{
+    key = "magic_studies",
+
+    loc_txt = {
+        name = "Magic Studies",
+        text = {
+            "Gain {C:purple}+1{}",
+            "{C:purple}Hex point{} for",
+            "hexing a Joker",
+        }
+    },
+
+    atlas = "HexVouchers",
+    pos = { x = 7, y = 0 },
+
+    unlocked = true,
+    discovered = true,
+
+    redeem = function(self, card)
+        G.GAME.hex_magic_studies_bonus = (G.GAME.hex_magic_studies_bonus or 0) + 1
+    end,
+}
+
+SMODS.Voucher{
+    key = "forbidden_knowledge",
+
+    loc_txt = {
+        name = "Forbidden Knowledge",
+        text = {
+            "Gain {C:purple}+2{}",
+            "{C:purple}Hex points{} for",
+            "hexing a Joker",
+            "{C:inactive}(Stacks with Magic Studies){}",
+        }
+    },
+
+    atlas = "HexVouchers",
+    pos = { x = 7, y = 0 },
+
+    requires = { "v_" .. mod.prefix .. "_magic_studies" },
+
+    unlocked = true,
+    discovered = true,
+
+    redeem = function(self, card)
+        G.GAME.hex_magic_studies_bonus = (G.GAME.hex_magic_studies_bonus or 0) + 2
+    end,
+}
+
+
+
+
+
+
 
 
 SMODS.Back{
@@ -8306,113 +8411,6 @@ end
 -- moment the round number moves on to the next round.
 local hex_old_add_round_eval_row = add_round_eval_row
 
-function add_round_eval_row(config)
-    if config and config.name == 'bottom'
-    and G.GAME and G.GAME.round
-    and G.GAME.hex_cash_out_paid_round ~= G.GAME.round then
-
-        local is_boss_blind = G.GAME.blind and G.GAME.blind.boss
-
-        local rigil_bonus = G.GAME.hex_rigil_bonus or 0
-        local toliman_bonus = is_boss_blind and (G.GAME.hex_toliman_bonus or 0) or 0
-        local bonus = rigil_bonus + toliman_bonus
-
-        -- Big Bang: independent of the money-bonus dedupe just below
-        -- (hex_cash_out_paid_round), so it still fires every round even
-        -- if neither Rigil Kentaurus nor Toliman is owned. The number of
-        -- cards created is however many the persistent hex_big_bang_count
-        -- counter has stacked up to (see its own definition -- +3 per
-        -- use, uncapped). Each card independently rolls Star vs. Galaxy,
-        -- then is always forced Negative -- same as Sombrero Galaxy/
-        -- Rigel's own grants -- but deliberately NOT gated on there being
-        -- room in G.consumeables, unlike those two: every card here is
-        -- always created regardless of how full the consumable area
-        -- already is.
-        local big_bang_count = G.GAME.hex_big_bang_count or 0
-
-        if big_bang_count > 0
-        and G.GAME.hex_big_bang_paid_round ~= G.GAME.round then
-
-            G.GAME.hex_big_bang_paid_round = G.GAME.round
-
-            -- Tracks every key already granted by this specific batch of
-            -- Big Bang cards, so (without Showman) the same Star/Galaxy
-            -- card can't be handed out twice in the same round -- reuses
-            -- hex_filter_already_picked, the same picked-table filter
-            -- Star Pack/Galaxy Pack's own create_card already use, which
-            -- itself skips the filter entirely once Showman is owned,
-            -- letting duplicates appear freely.
-            local big_bang_picked = {}
-
-            for i = 1, big_bang_count do
-                G.E_MANAGER:add_event(Event({
-                    trigger = "after",
-                    delay = 0.2 * i,
-                    func = function()
-                        if G.consumeables then
-                            local chosen_key = nil
-
-                            if pseudorandom(pseudoseed(mod.prefix .. "_big_bang_galaxy_" .. i .. "_" .. G.GAME.round)) < 0.1 then
-                                local galaxies = hex_filter_already_picked(hex_get_galaxy_centers(), big_bang_picked)
-                                if #galaxies > 0 then
-                                    chosen_key = galaxies[math.random(#galaxies)].key
-                                end
-                            end
-
-                            if not chosen_key then
-                                local stars = hex_filter_already_picked(hex_get_star_centers(), big_bang_picked)
-                                if #stars > 0 then
-                                    chosen_key = stars[math.random(#stars)].key
-                                end
-                            end
-
-                            if chosen_key then
-                                big_bang_picked[chosen_key] = true
-
-                                local new_card = SMODS.create_card({
-                                    key = chosen_key,
-                                    area = G.consumeables
-                                })
-
-                                new_card:set_edition({ negative = true }, true)
-
-                                G.consumeables:emplace(new_card)
-                            end
-                        end
-                        return true
-                    end
-                }))
-            end
-        end
-
-        if bonus > 0 then
-            G.GAME.hex_cash_out_paid_round = G.GAME.round
-            config.dollars = to_big(config.dollars or 0):add(big(bonus))
-
-            if rigil_bonus > 0 then
-                hex_old_add_round_eval_row({
-                    name = 'joker_hex_rigil_kentaurus',
-                    dollars = rigil_bonus,
-                    card = hex_star_bonus_card_stub('rigil_kentaurus'),
-                    pitch = 1,
-                })
-            end
-
-            if toliman_bonus > 0 then
-                hex_old_add_round_eval_row({
-                    name = 'joker_hex_toliman',
-                    dollars = toliman_bonus,
-                    card = hex_star_bonus_card_stub('toliman'),
-                    pitch = 1,
-                })
-            end
-        end
-    end
-
-    return hex_old_add_round_eval_row(config)
-end
-
-
 
 
 
@@ -10899,7 +10897,7 @@ local hex_old_card_open = Card.open
 
 function Card:open(...)
     if self.ability and self.ability.set == "Booster" then
-        local bonus = (G.GAME and G.GAME.hex_wormhole_bonus) or 0
+        local bonus = ((G.GAME and G.GAME.hex_wormhole_bonus) or 0) + ((G.GAME and G.GAME.hex_bigbox_bonus) or 0)
         if bonus > 0 and self.ability.extra then
             self.ability.extra = self.ability.extra + bonus
         end
@@ -11102,6 +11100,11 @@ local function hex_compute_sacrifice_gain(card)
         local monolith_count = #SMODS.find_card("j_" .. mod.prefix .. "_the_monolith")
         if monolith_count > 0 then
             gain = gain:add(big(monolith_count)) 
+        end
+
+        local magic_bonus = (G.GAME and G.GAME.hex_magic_studies_bonus) or 0
+        if magic_bonus > 0 then
+            gain = gain:add(big(magic_bonus))
         end
     end
 
@@ -13714,6 +13717,249 @@ end
 
 
 
+SMODS.Consumable{
+    key = "big_crunch",
+    set = "ritual",
+
+    atlas = "HexRitualsQuantums",
+    pos = { x = 7, y = 0 }, -- next open frame, adjust before shipping
+
+    unlocked = true,
+    discovered = true,
+
+    in_pool = function(self)
+        return false             -- never naturally generated; must be granted directly
+    end,
+
+    loc_txt = {
+        name = "Big Crunch",
+        text = {
+            "Creates {C:attention}3{} random",
+            "{C:dark_red}Negative{} {C:legendary}Legendary{}",
+            "Jokers",
+        }
+    },
+
+    can_use = function(self, card)
+        return true
+    end,
+
+    use = function(self, card)
+        local showman_owned = hex_owns_showman()
+
+        local legendaries = {}
+        for _, center in pairs(G.P_CENTERS) do
+            if center.set == "Joker"
+            and center.rarity == 4
+            and (showman_owned or #SMODS.find_card(center.key) == 0) then
+                legendaries[#legendaries + 1] = center
+            end
+        end
+
+        if #legendaries > 0 then
+            for i = 1, 3 do
+                G.E_MANAGER:add_event(Event({
+                    trigger = "after",
+                    delay = 0.2 * i,
+                    func = function()
+                        local chosen = legendaries[math.random(#legendaries)]
+
+                        local new_card = SMODS.create_card({
+                            set = "Joker",
+                            key = chosen.key,
+                            area = G.jokers
+                        })
+
+                        new_card:set_edition({ negative = true }, true)
+
+                        G.jokers:emplace(new_card)
+                        new_card:add_to_deck()
+
+                        card_eval_status_text(new_card, "extra", nil, nil, nil, {
+                            message = "BIG CRUNCH!",
+                            colour = G.C.RITUAL
+                        })
+
+                        return true
+                    end
+                }))
+            end
+        end
+
+        G.GAME.hex_rituals_used = G.GAME.hex_rituals_used or {}
+        G.GAME.hex_rituals_used["big_crunch"] = true
+
+        card_eval_status_text(card, "extra", nil, nil, nil, {
+            message = "Big Crunch!",
+            colour = G.C.RITUAL
+        })
+    end,
+}
+
+SMODS.Consumable{
+    key = "big_rip",
+    set = "ritual",
+
+    atlas = "HexRitualsQuantums",
+    pos = { x = 8, y = 0 }, -- next open frame, adjust before shipping
+
+    unlocked = true,
+    discovered = true,
+
+    in_pool = function(self)
+        return false             -- never naturally generated; must be granted directly
+    end,
+
+    loc_txt = {
+        name = "Big Rip",
+        text = {
+            "Creates {C:attention}2{} {C:dark_red}Negative{}",
+            "{C:blue}Blueprint{} Jokers",
+        }
+    },
+
+    can_use = function(self, card)
+        return true
+    end,
+
+    use = function(self, card)
+        for i = 1, 2 do
+            G.E_MANAGER:add_event(Event({
+                trigger = "after",
+                delay = 0.2 * i,
+                func = function()
+                    local new_card = SMODS.create_card({
+                        set = "Joker",
+                        key = "j_blueprint",
+                        area = G.jokers
+                    })
+
+                    new_card:set_edition({ negative = true }, true)
+
+                    G.jokers:emplace(new_card)
+                    new_card:add_to_deck()
+
+                    card_eval_status_text(new_card, "extra", nil, nil, nil, {
+                        message = "BIG RIP!",
+                        colour = G.C.RITUAL
+                    })
+
+                    return true
+                end
+            }))
+        end
+
+        G.GAME.hex_rituals_used = G.GAME.hex_rituals_used or {}
+        G.GAME.hex_rituals_used["big_rip"] = true
+
+        card_eval_status_text(card, "extra", nil, nil, nil, {
+            message = "Big Rip!",
+            colour = G.C.RITUAL
+        })
+    end,
+}
+
+
+
+SMODS.Consumable{
+    key = "false_vacuum_decay",
+    set = "ritual",
+
+    atlas = "HexRitualsQuantums",
+    pos = { x = 9, y = 0 },
+
+    unlocked = true,
+    discovered = true,
+
+    in_pool = function(self)
+        return false
+    end,
+
+    loc_txt = {
+        name = "False Vacuum Decay",
+        text = {
+            "Permanently gain {C:purple}+10{}",
+            "{C:purple}Hex points{} at the",
+            "{C:attention}end of every round{}",
+            "{C:inactive}(Currently +#1# per round){}",
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        local gain = (G.GAME and (G.GAME.hex_false_vacuum_uses or 0) * 10) or 10
+        return { vars = { gain } }
+    end,
+
+    can_use = function(self, card)
+        return true
+    end,
+
+    use = function(self, card)
+        G.GAME.hex_false_vacuum_uses = (G.GAME.hex_false_vacuum_uses or 0) + 1
+
+        G.GAME.hex_rituals_used = G.GAME.hex_rituals_used or {}
+        G.GAME.hex_rituals_used["false_vacuum_decay"] = true
+
+        card_eval_status_text(card, "extra", nil, nil, nil, {
+            message = "False Vacuum Decay!",
+            colour = G.C.RITUAL
+        })
+    end,
+}
+
+SMODS.Consumable{
+    key = "heat_death",
+    set = "ritual",
+
+    atlas = "HexRitualsQuantums",
+    pos = { x = 0, y = 1 }, -- next open frame, adjust before shipping
+
+    unlocked = true,
+    discovered = true,
+
+    in_pool = function(self)
+        return false             -- never naturally generated; must be granted directly
+    end,
+
+    loc_txt = {
+        name = "Heat Death",
+        text = {
+            "Permanently {C:money}X(n+1){}",
+            "your {C:money}money{} at the",
+            "{C:attention}end of every round{}",
+            "{C:inactive}(n = times this card{}",
+            "{C:inactive}has been used){}",
+            "{C:inactive}(Currently X#1#){}",
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        local n = (G.GAME and (G.GAME.hex_heat_death_uses or 0) + 1) or 2
+        return { vars = { n } }
+    end,
+
+    can_use = function(self, card)
+        return true
+    end,
+
+    use = function(self, card)
+        G.GAME.hex_heat_death_uses = (G.GAME.hex_heat_death_uses or 0) + 1
+
+        G.GAME.hex_rituals_used = G.GAME.hex_rituals_used or {}
+        G.GAME.hex_rituals_used["heat_death"] = true
+
+        card_eval_status_text(card, "extra", nil, nil, nil, {
+            message = "Heat Death!",
+            colour = G.C.RITUAL
+        })
+    end,
+}
+
+
+
+
+
+
 
 
 
@@ -14132,6 +14378,10 @@ function Game:start_run(...)
     G.GAME.hex_wormhole_bonus = G.GAME.hex_wormhole_bonus or 0
     G.GAME.hex_laniakea_used = G.GAME.hex_laniakea_used or false
     G.GAME.hex_giant_arc_bonus = G.GAME.hex_giant_arc_bonus or 0
+    G.GAME.hex_bigbox_bonus = G.GAME.hex_bigbox_bonus or 0
+    G.GAME.hex_magic_studies_bonus = G.GAME.hex_magic_studies_bonus or 0
+    G.GAME.hex_false_vacuum_uses = G.GAME.hex_false_vacuum_uses or 0
+    G.GAME.hex_heat_death_uses = G.GAME.hex_heat_death_uses or 0
 
     -- Re-apply the hyperoperator scoring calculation on resume/load, since
     -- G.GAME.current_scoring_calculation_key isn't guaranteed to survive it.
@@ -14302,6 +14552,10 @@ G.FUNCS.create_ritual = function()
         "manifest",
         "ascension",
         "big_bang",
+        "big_crunch",
+        "big_rip",
+        "false_vacuum_decay",
+        "heat_death",
     }
 
     local rituals = {}
@@ -15065,6 +15319,62 @@ end
 
 function add_round_eval_row(config)
     local config = config or {}
+
+    -- Rigil Kentaurus / Toliman / Big Bang / False Vacuum Decay / Heat Death
+    if config and config.name == 'bottom'
+    and G.GAME and G.GAME.round
+    and G.GAME.hex_cash_out_paid_round ~= G.GAME.round then
+
+        local is_boss_blind = G.GAME.blind and G.GAME.blind.boss
+
+        local rigil_bonus = G.GAME.hex_rigil_bonus or 0
+        local toliman_bonus = is_boss_blind and (G.GAME.hex_toliman_bonus or 0) or 0
+        local bonus = rigil_bonus + toliman_bonus
+
+        if (G.GAME.hex_false_vacuum_uses or 0) > 0
+        and G.GAME.hex_false_vacuum_paid_round ~= G.GAME.round then
+            G.GAME.hex_false_vacuum_paid_round = G.GAME.round
+            local gain = 10 * G.GAME.hex_false_vacuum_uses
+            G.GAME.hex_points = (G.GAME.hex_points or big(0)):add(big(gain))
+        end
+
+        if (G.GAME.hex_heat_death_uses or 0) > 0
+        and G.GAME.hex_heat_death_paid_round ~= G.GAME.round then
+            G.GAME.hex_heat_death_paid_round = G.GAME.round
+            local n = (G.GAME.hex_heat_death_uses or 0) + 1
+            G.GAME.dollars = to_big(G.GAME.dollars or 0):mul(big(n))
+        end
+
+        local big_bang_count = G.GAME.hex_big_bang_count or 0
+        if big_bang_count > 0
+        and G.GAME.hex_big_bang_paid_round ~= G.GAME.round then
+            -- (keep your existing Big Bang card-creation code here, unchanged)
+        end
+
+        if bonus > 0 then
+            G.GAME.hex_cash_out_paid_round = G.GAME.round
+            config.dollars = to_big(config.dollars or 0):add(big(bonus))
+
+            if rigil_bonus > 0 then
+                hex_old_add_round_eval_row({
+                    name = 'joker_hex_rigil_kentaurus',
+                    dollars = rigil_bonus,
+                    card = hex_star_bonus_card_stub('rigil_kentaurus'),
+                    pitch = 1,
+                })
+            end
+
+            if toliman_bonus > 0 then
+                hex_old_add_round_eval_row({
+                    name = 'joker_hex_toliman',
+                    dollars = toliman_bonus,
+                    card = hex_star_bonus_card_stub('toliman'),
+                    pitch = 1,
+                })
+            end
+        end
+    end
+
     local width = G.round_eval.T.w - 0.51
     local num_dollars = hex_to_plain_number(config.dollars or 1)
     local scale = 0.9
