@@ -5961,6 +5961,80 @@ SMODS.Joker{
 
 
 
+-- ============================================================
+-- Joker selection system (click to select, for Curse/Vessel below)
+-- Vanilla never highlights Jokers -- this raises G.jokers' own
+-- highlighted_limit to 1 (permanently; harmless when nothing uses it)
+-- and manages click-to-toggle ourselves, the same
+-- CardArea:add_to_highlighted/remove_from_highlighted API G.hand's own
+-- highlighting already goes through elsewhere in the game.
+-- ============================================================
+
+local old_start_run_joker_select = Game.start_run
+
+function Game:start_run(...)
+    local ret = old_start_run_joker_select(self, ...)
+
+    if G.jokers and G.jokers.config then
+        G.jokers.config.highlighted_limit = 1
+    end
+
+    return ret
+end
+
+local hex_joker_select_old_click = Card.click
+
+function Card:click()
+    if self.area == G.jokers and self.ability and self.ability.set == "Joker" then
+        if self.highlighted then
+            G.jokers:remove_from_highlighted(self)
+        else
+            -- Enforce single-selection: drop anything else currently
+            -- highlighted before adding this one.
+            if G.jokers.highlighted then
+                for i = #G.jokers.highlighted, 1, -1 do
+                    if G.jokers.highlighted[i] ~= self then
+                        G.jokers:remove_from_highlighted(G.jokers.highlighted[i])
+                    end
+                end
+            end
+            G.jokers:add_to_highlighted(self)
+        end
+
+        return
+    end
+
+    hex_joker_select_old_click(self)
+end
+
+
+
+
+
+
+
+-- Helper: eligible Jokers for Huge-LQG's random hex -- same exclusions
+-- G.FUNCS.hex_sacrifice itself enforces (Eternal Jokers and Absolute can
+-- never be hexed), reusing hex_apply_immortal_sticker's own key so this
+-- also can never target anything carrying the Immortal sticker.
+local function hex_huge_lqg_eligible_jokers()
+    local out = {}
+    if not (G.jokers and G.jokers.cards) then return out end
+
+    for _, j in ipairs(G.jokers.cards) do
+        local eternal = j.ability and j.ability.eternal
+        local immortal = j.ability and j.ability[HEX_IMMORTAL_STICKER_KEY]
+        local is_absolute = j.config and j.config.center
+            and j.config.center.key == ("j_" .. mod.prefix .. "_absolute")
+
+        if not eternal and not immortal and not is_absolute then
+            out[#out + 1] = j
+        end
+    end
+
+    return out
+end
+
 
 
 
@@ -6377,6 +6451,415 @@ SMODS.Consumable{
         })
     end,
 }
+
+
+
+-- Base-game playing card ranks, using the same single-character keys
+-- Balatro's own G.P_CARDS table is keyed with (T = Ten).
+local HEX_MANIFEST_RANKS = { "A", "K", "Q", "J", "T", "9", "8", "7", "6", "5", "4", "3", "2" }
+
+
+-- Genesis: creates one fully random playing card -- random suit, rank,
+-- and (vanilla-only) enhancement/seal/edition, or plain if the roll
+-- lands on "none" for a given slot. Deliberately restricted to vanilla
+-- content -- excludes every one of this mod's own custom enhancements
+-- (Crystal/Platinum/Ruby/Sapphire/Topaz/Diamond/Bronze), seals
+-- (Orange/Green/Pink/Black), and editions (Prismatic/Chromatic/
+-- Brilliant/Radiant/Empowered), the same way HEX_SHOP_ENHANCED_ALLOWED's
+-- own Bronze exclusion works, just with Bronze also left out here.
+local HEX_GENESIS_ENHANCEMENTS = {
+    "none", "m_bonus", "m_mult", "m_wild", "m_glass",
+    "m_steel", "m_stone", "m_gold", "m_lucky",
+}
+local HEX_GENESIS_SEALS = { "none", "Gold", "Red", "Blue", "Purple" }
+local HEX_GENESIS_EDITIONS = { "none", "e_foil", "e_holo", "e_polychrome"}
+
+SMODS.Consumable{
+    key = "genesis",
+    set = "Spectral",
+
+    atlas = "HexSpectrals",
+    pos = { x = 0, y = 3 }, -- placeholder art slot, adjust before shipping
+
+    unlocked = true,
+    discovered = true,
+
+    in_pool = function(self)
+        return true
+    end,
+
+    loc_txt = {
+        name = "Genesis",
+        text = {
+            "Creates {C:attention}1{} card with a",
+            "{C:attention}random{} Suit, Rank, Seal,",
+            "Edition, and Enhancement",
+            "{C:inactive}(Vanilla cards only){}",
+        }
+    },
+
+    can_use = function(self, card)
+        return true
+    end,
+
+    use = function(self, card)
+        local suits = { "Spades", "Hearts", "Clubs", "Diamonds" }
+        local suit = pseudorandom_element(suits, pseudoseed(mod.prefix .. "_genesis_suit"))
+        local rank = pseudorandom_element(HEX_MANIFEST_RANKS, pseudoseed(mod.prefix .. "_genesis_rank"))
+
+        local enhancement = pseudorandom_element(HEX_GENESIS_ENHANCEMENTS, pseudoseed(mod.prefix .. "_genesis_enh"))
+        local seal = pseudorandom_element(HEX_GENESIS_SEALS, pseudoseed(mod.prefix .. "_genesis_seal"))
+        local edition = pseudorandom_element(HEX_GENESIS_EDITIONS, pseudoseed(mod.prefix .. "_genesis_edition"))
+
+        if enhancement == "none" then enhancement = nil end
+        if seal == "none" then seal = nil end
+        if edition == "none" then edition = nil end
+
+        G.E_MANAGER:add_event(Event({
+            trigger = "after",
+            delay = 0.1,
+            func = function()
+                local new_card = SMODS.create_card({
+                    set = "Base",
+                    suit = suit,
+                    rank = rank,
+                    enhancement = enhancement,
+                    seal = seal,
+                    edition = edition,
+                    area = G.deck,
+                })
+
+                new_card:add_to_deck()
+                G.deck:emplace(new_card)
+
+                if G.playing_cards then
+                    local already_present = false
+                    for _, c in ipairs(G.playing_cards) do
+                        if c == new_card then already_present = true; break end
+                    end
+                    if not already_present then
+                        table.insert(G.playing_cards, new_card)
+                    end
+                end
+
+                card_eval_status_text(new_card, "extra", nil, nil, nil, {
+                    message = "Genesis!",
+                    colour = G.C.SECONDARY_SET.Spectral
+                })
+
+                return true
+            end
+        }))
+    end,
+}
+
+-- Exile: destroys a random owned Joker, then grants 15 Hex points.
+-- Reuses hex_huge_lqg_eligible_jokers (Eternal/Immortal/Absolute all
+-- protected, same exclusions Huge-LQG's own random-hex already uses)
+-- since this is the same "destroy a random Joker for a Hex-point
+-- reward" shape as that card, just a flat amount instead of a
+-- rarity-scaled one.
+SMODS.Consumable{
+    key = "exile",
+    set = "Spectral",
+
+    atlas = "HexSpectrals",
+    pos = { x = 1, y = 3 },
+
+    unlocked = true,
+    discovered = true,
+
+    in_pool = function(self)
+        return true
+    end,
+
+    loc_txt = {
+        name = "Exile",
+        text = {
+            "Destroys a {C:attention}random{} Joker",
+            "Gain {C:purple}15{}",
+            "{C:purple}Hex points{}",
+        }
+    },
+
+    can_use = function(self, card)
+        return #hex_huge_lqg_eligible_jokers() > 0
+    end,
+
+    use = function(self, card)
+        local eligible = hex_huge_lqg_eligible_jokers()
+        if not eligible[1] then return end
+
+        local chosen = pseudorandom_element(eligible, pseudoseed(mod.prefix .. "_exile"))
+
+        G.E_MANAGER:add_event(Event({
+            trigger = "after",
+            delay = 0.1,
+            func = function()
+                chosen:start_dissolve()
+                return true
+            end
+        }))
+
+        G.GAME.hex_points = (G.GAME.hex_points or big(0)):add(big(15))
+
+        card_eval_status_text(card, "extra", nil, nil, nil, {
+            message = "+15 Hex",
+            colour = G.C.SECONDARY_SET.Spectral
+        })
+    end,
+}
+
+-- Curse: select a Joker (click it in your Joker slots), then use this
+-- card -- marks that exact Joker so the next time it's hexed (via the
+-- HEX sacrifice button OR Huge-LQG, since both route through
+-- hex_compute_sacrifice_gain) it grants double its normal Hex-point
+-- value. The flag lives directly on the card object and is consumed
+-- (cleared) the moment it's actually cashed in -- see the
+-- hex_compute_sacrifice_gain edit below.
+SMODS.Consumable{
+    key = "curse",
+    set = "Spectral",
+
+    atlas = "HexSpectrals",
+    pos = { x = 2, y = 3 },
+
+    unlocked = true,
+    discovered = true,
+
+    in_pool = function(self)
+        return true
+    end,
+
+    loc_txt = {
+        name = "Curse",
+        text = {
+            "Select a Joker,",
+            "use this card to {C:purple}hex{}",
+            "the Joker for {C:attention}double{}",
+            "the {C:purple}Hex points{}",
+        }
+    },
+
+    can_use = function(self, card)
+        return G.jokers and G.jokers.highlighted and #G.jokers.highlighted == 1
+    end,
+
+    use = function(self, card)
+        if not (G.jokers and G.jokers.highlighted and G.jokers.highlighted[1]) then return end
+
+        local target = G.jokers.highlighted[1]
+
+        -- Same protections G.FUNCS.hex_sacrifice itself enforces -- Eternal
+        -- Jokers and Absolute can never be hexed.
+        if target.ability and target.ability.eternal then return end
+        if target.config and target.config.center and target.config.center.key == ("j_" .. mod.prefix .. "_absolute") then return end
+
+        G.jokers:remove_from_highlighted(target)
+
+        -- Flag it cursed first so hex_compute_sacrifice_gain doubles the
+        -- gain (and clears the flag) the same way it would if this were
+        -- consumed later via the HEX button/Huge-LQG.
+        target.hex_cursed = true
+
+        local gain = hex_compute_sacrifice_gain(target)
+
+        if gain:gt(big(0)) then
+            G.GAME.hex_points = (G.GAME.hex_points or big(0)):add(gain)
+
+            card_eval_status_text(target, "extra", nil, nil, nil, {
+                message = "+" .. tostring(gain) .. " Hex",
+                colour = G.C.RITUAL
+            })
+
+            G.E_MANAGER:add_event(Event({
+                trigger = "after",
+                delay = 0.3,
+                func = function()
+                    target:start_dissolve()
+                    return true
+                end
+            }))
+        end
+    end,
+}
+
+-- Vessel: select a Joker that has an Edition, destroys it, and hands
+-- that exact Edition off to another Joker -- preferring one that
+-- currently has no Edition of its own, so nothing is lost by accident;
+-- only overwrites an existing Edition if every other Joker already has
+-- one.
+SMODS.Consumable{
+    key = "vessel",
+    set = "Spectral",
+
+    atlas = "HexSpectrals",
+    pos = { x = 3, y = 3 },
+
+    unlocked = true,
+    discovered = true,
+
+    in_pool = function(self)
+        return true
+    end,
+
+    loc_txt = {
+        name = "Vessel",
+        text = {
+            "Select a Joker with an Edition,",
+            "this card will destroy it",
+            "and gives the Joker's",
+            "{C:dark_edition}Edition{} to a {C:attention}random{} ownded Joker",
+        }
+    },
+
+    can_use = function(self, card)
+        if not (G.jokers and G.jokers.highlighted and #G.jokers.highlighted == 1) then
+            return false
+        end
+        local target = G.jokers.highlighted[1]
+        if not target.edition then return false end
+        return #G.jokers.cards >= 2
+    end,
+
+    use = function(self, card)
+        if not (G.jokers and G.jokers.highlighted and G.jokers.highlighted[1]) then return end
+
+        local target = G.jokers.highlighted[1]
+        if not target.edition then return end
+        if #G.jokers.cards < 2 then return end
+
+        local edition_copy = {}
+        for k, v in pairs(target.edition) do
+            edition_copy[k] = v
+        end
+
+        local editionless_candidates = {}
+        local any_other_candidates = {}
+        for _, j in ipairs(G.jokers.cards) do
+            if j ~= target then
+                any_other_candidates[#any_other_candidates + 1] = j
+                if not j.edition then
+                    editionless_candidates[#editionless_candidates + 1] = j
+                end
+            end
+        end
+
+        local pool = (#editionless_candidates > 0) and editionless_candidates or any_other_candidates
+        if not pool[1] then return end
+
+        local recipient = pseudorandom_element(pool, pseudoseed(mod.prefix .. "_vessel"))
+
+        G.jokers:remove_from_highlighted(target)
+
+        G.E_MANAGER:add_event(Event({
+            trigger = "after",
+            delay = 0.1,
+            func = function()
+                target:start_dissolve()
+                return true
+            end
+        }))
+
+        G.E_MANAGER:add_event(Event({
+            trigger = "after",
+            delay = 0.4,
+            func = function()
+                recipient:set_edition(edition_copy, true)
+                card_eval_status_text(recipient, "extra", nil, nil, nil, {
+                    message = localize("k_upgrade_ex"),
+                    colour = G.C.SECONDARY_SET.Spectral
+                })
+                return true
+            end
+        }))
+    end,
+}
+
+-- Collapse: destroys a random 50% of every playing card you own --
+-- hand, deck, discard, and play alike, using G.playing_cards as the
+-- master registry (same one hex_count_diamond_cards already scans
+-- elsewhere in this file) -- and grants $1 for each card destroyed.
+SMODS.Consumable{
+    key = "collapse",
+    set = "Spectral",
+
+    atlas = "HexSpectrals",
+    pos = { x = 4, y = 3 },
+
+    unlocked = true,
+    discovered = true,
+
+    in_pool = function(self)
+        return true
+    end,
+
+    loc_txt = {
+        name = "Collapse",
+        text = {
+            "Destroys a random {C:attention}50%{}",
+            "of your deck",
+            "Gain {C:money}$1{} for every",
+            "card destroyed",
+        }
+    },
+
+    can_use = function(self, card)
+        return G.playing_cards and #G.playing_cards > 0
+    end,
+
+    use = function(self, card)
+        if not (G.playing_cards and #G.playing_cards > 0) then return end
+
+        local pool = {}
+        for _, c in ipairs(G.playing_cards) do
+            pool[#pool + 1] = c
+        end
+
+        local count = math.floor(#pool / 2)
+        local to_destroy = {}
+
+        for i = 1, count do
+            if #pool == 0 then break end
+            local idx = math.floor(pseudorandom(pseudoseed(mod.prefix .. "_collapse_" .. i), 1, #pool))
+            to_destroy[#to_destroy + 1] = pool[idx]
+            table.remove(pool, idx)
+        end
+
+        local destroyed_count = #to_destroy
+
+        for i, c in ipairs(to_destroy) do
+            G.E_MANAGER:add_event(Event({
+                trigger = "after",
+                delay = 0.02 * i,
+                func = function()
+                    if c.area then
+                        c.area:remove_card(c)
+                    end
+                    if G.playing_cards then
+                        for j, pc in ipairs(G.playing_cards) do
+                            if pc == c then
+                                table.remove(G.playing_cards, j)
+                                break
+                            end
+                        end
+                    end
+                    c:start_dissolve()
+                    return true
+                end
+            }))
+        end
+
+        G.GAME.dollars = to_big(G.GAME.dollars or 0):add(big(destroyed_count))
+
+        card_eval_status_text(card, "extra", nil, nil, nil, {
+            message = "+$" .. tostring(destroyed_count),
+            colour = G.C.SECONDARY_SET.Spectral
+        })
+    end,
+}
+
+
 
 
 
@@ -10611,6 +11094,11 @@ local function hex_compute_sacrifice_gain(card)
             gain = gain:mul(big(2))
         end
 
+        if card.hex_cursed then
+            gain = gain:mul(big(2))
+            card.hex_cursed = nil
+        end
+
         local monolith_count = #SMODS.find_card("j_" .. mod.prefix .. "_the_monolith")
         if monolith_count > 0 then
             gain = gain:add(big(monolith_count)) 
@@ -10928,29 +11416,6 @@ SMODS.Consumable{
 }
 
 
-
-
--- Helper: eligible Jokers for Huge-LQG's random hex -- same exclusions
--- G.FUNCS.hex_sacrifice itself enforces (Eternal Jokers and Absolute can
--- never be hexed), reusing hex_apply_immortal_sticker's own key so this
--- also can never target anything carrying the Immortal sticker.
-local function hex_huge_lqg_eligible_jokers()
-    local out = {}
-    if not (G.jokers and G.jokers.cards) then return out end
-
-    for _, j in ipairs(G.jokers.cards) do
-        local eternal = j.ability and j.ability.eternal
-        local immortal = j.ability and j.ability[HEX_IMMORTAL_STICKER_KEY]
-        local is_absolute = j.config and j.config.center
-            and j.config.center.key == ("j_" .. mod.prefix .. "_absolute")
-
-        if not eternal and not immortal and not is_absolute then
-            out[#out + 1] = j
-        end
-    end
-
-    return out
-end
 
 SMODS.Consumable{
     key = "huge_lqg",
@@ -12466,10 +12931,6 @@ local HEX_MANIFEST_SUIT_LETTERS = {
     Clubs = "C",
     Diamonds = "D",
 }
-
--- Base-game playing card ranks, using the same single-character keys
--- Balatro's own G.P_CARDS table is keyed with (T = Ten).
-local HEX_MANIFEST_RANKS = { "A", "K", "Q", "J", "T", "9", "8", "7", "6", "5", "4", "3", "2" }
 
 -- These three lists used to be hand-typed, which meant any enhancement,
 -- seal, or edition added later (by this mod or any other mod) silently
