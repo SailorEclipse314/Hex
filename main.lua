@@ -2452,8 +2452,6 @@ SMODS.Enhancement{
 
 
 
-
-
 local HEX_ENHANCEMENT_POOL_EXCLUDE = {
     ["m_" .. mod.prefix .. "_crystal"] = true,
     ["m_" .. mod.prefix .. "_platinum"] = true,
@@ -2461,6 +2459,26 @@ local HEX_ENHANCEMENT_POOL_EXCLUDE = {
     ["m_" .. mod.prefix .. "_sapphire"] = true,
     ["m_" .. mod.prefix .. "_topaz"] = true,
     ["m_" .. mod.prefix .. "_diamond"] = true,
+}
+
+-- Custom Seals (Orange/Green/Pink/Black) should never be randomly rolled
+-- onto a card by vanilla mechanisms -- e.g. Standard Packs' own "special"
+-- seal chance, or the Certificate Joker's random-rank/suit/seal grant --
+-- both of which build their candidate seal list from whatever seal keys
+-- are currently registered, which now includes every custom seal this
+-- mod adds via SMODS.Seal (Steamodded registers those into the same
+-- G.P_SEALS pool as vanilla's own Gold/Red/Blue/Purple). Every one of
+-- our custom seals is meant to be grant-only (via specific Star/Galaxy
+-- cards, The Seal of Aces, etc.) -- seals have no should_apply hook the
+-- way Stickers do (see Immortal's should_apply = false above for that
+-- pattern), so this filters them out of the shared pseudorandom_element
+-- roll instead, the same exclusion approach HEX_ENHANCEMENT_POOL_EXCLUDE
+-- already uses just above for custom Enhancements.
+local HEX_SEAL_POOL_EXCLUDE = {
+    [mod.prefix .. "_orange"] = true,
+    [mod.prefix .. "_green"] = true,
+    [mod.prefix .. "_pink"] = true,
+    [mod.prefix .. "_black"] = true,
 }
 
 local hex_old_pseudorandom_element = pseudorandom_element
@@ -2477,6 +2495,24 @@ function pseudorandom_element(_t, seed)
         for _, center in ipairs(_t) do
             if not HEX_ENHANCEMENT_POOL_EXCLUDE[center.key] then
                 filtered[#filtered + 1] = center
+            end
+        end
+
+        if #filtered > 0 then
+            return hex_old_pseudorandom_element(filtered, seed)
+        end
+    end
+
+    -- Seal pools are plain string keys ("Gold", "Red", "Blue", "Purple",
+    -- plus every custom seal registered by this or any other mod) rather
+    -- than Center tables, so they're detected differently -- by checking
+    -- that the first element is a string which is actually a registered
+    -- seal key in G.P_SEALS.
+    if type(_t) == "table" and #_t > 0 and type(_t[1]) == "string" and G.P_SEALS and G.P_SEALS[_t[1]] then
+        local filtered = {}
+        for _, key in ipairs(_t) do
+            if not HEX_SEAL_POOL_EXCLUDE[key] then
+                filtered[#filtered + 1] = key
             end
         end
 
@@ -3516,7 +3552,7 @@ SMODS.Back({
 
     set_deck = function(self, card, the_deck)
         if G.GAME and G.GAME.dollars then
-            G.GAME.dollars = 996
+            G.GAME.dollars = big(996) -- CHANGED: was 996
         end
     end
 })
@@ -4759,7 +4795,7 @@ function Game:start_run(args, ...)
             G.GAME.current_round.discards_left = G.GAME.round_resets.discards
         end
 
-        G.GAME.dollars = 0
+        G.GAME.dollars = big(0) -- CHANGED: was 0
 
         -- Hand size: the round-1 hand has already been dealt at the
         -- vanilla/deck-default size by the time this hook runs, so trim
@@ -4840,7 +4876,7 @@ function Game:start_run(args, ...)
             G.GAME.current_round.discards_left = G.GAME.round_resets.discards
         end
 
-        G.GAME.dollars = 0
+        G.GAME.dollars = big(0) -- CHANGED: was 0
 
         if G.hand and G.hand.config then
             G.hand.config.card_limit = G.GAME.round_resets.hand_size
@@ -4982,7 +5018,7 @@ function Game:start_run(...)
         end
 
         -- Starting money: overwrite whatever old_start_run set G.GAME.dollars to.
-        G.GAME.dollars = rolled_dollars
+        G.GAME.dollars = big(rolled_dollars) -- CHANGED: was rolled_dollars
 
         -- Hand size: overwrite the baseline used every round, then fix up
         -- the hand that's already been dealt for round 1.
@@ -5742,23 +5778,18 @@ SMODS.Joker{
         return { vars = { height } }
     end,
 
-    calculate = function(self, card, context)
+calculate = function(self, card, context)
         -- Applied when Juno itself scores, in its actual position among
         -- the Joker slots (like Musa Acuminata's ^2), rather than being
         -- forced to the very end of scoring. Jokers to Juno's left have
-        -- already applied their Mult changes when this tetration happens,
-        -- and Jokers to Juno's right apply on top of it.
+        -- already applied their Chips/Mult changes when this tetration
+        -- happens, and Jokers to Juno's right apply on top of it.
         if context.joker_main then
-            local height = ((G.jokers and #G.jokers.cards ) or 1) +1
+            local height = ((G.jokers and #G.jokers.cards) or 1) + 1
 
             if height > 0 then
                 return {
-                    func = function()
-                        mult = to_big(mult):arrow(2, height)
-                        update_hand_text({delay = 0}, {mult = mult})
-                    end,
-                    message = "^^" .. tostring(height),
-                    colour = G.C.TRANSCENDENTAL
+                    ee_mult = height,
                 }
             end
         end
@@ -7351,17 +7382,7 @@ end
 -- here, which double-paid it (once from our own ease_dollars call, once
 -- again when vanilla's cash_out paid out the now-inflated
 -- current_round.dollars).
---
--- Also adds its own "+$X" breakdown row for each Star card that actually
--- contributed money this round, immediately before the Cash Out row --
--- the exact same 'joker' row rendering path Rocket/Golden Joker's own
--- calculate_dollar_bonus rides on (add_round_eval_row branches on
--- string.find(config.name, 'joker') to show a card's name via its own
--- loc_txt, regardless of whether the card is an actual Joker). Toliman's
--- row only ever appears when toliman_bonus > 0, which is already gated
--- on is_boss_blind above, so it naturally only shows up after Boss
--- Blinds -- no extra check needed here.
---
+
 -- Guarded by G.GAME.round purely as cheap insurance against this
 -- somehow firing more than once for the same round -- it self-clears the
 -- moment the round number moves on to the next round.
@@ -7396,6 +7417,15 @@ function add_round_eval_row(config)
 
             G.GAME.hex_big_bang_paid_round = G.GAME.round
 
+            -- Tracks every key already granted by this specific batch of
+            -- Big Bang cards, so (without Showman) the same Star/Galaxy
+            -- card can't be handed out twice in the same round -- reuses
+            -- hex_filter_already_picked, the same picked-table filter
+            -- Star Pack/Galaxy Pack's own create_card already use, which
+            -- itself skips the filter entirely once Showman is owned,
+            -- letting duplicates appear freely.
+            local big_bang_picked = {}
+
             for i = 1, big_bang_count do
                 G.E_MANAGER:add_event(Event({
                     trigger = "after",
@@ -7405,20 +7435,22 @@ function add_round_eval_row(config)
                             local chosen_key = nil
 
                             if pseudorandom(pseudoseed(mod.prefix .. "_big_bang_galaxy_" .. i .. "_" .. G.GAME.round)) < 0.1 then
-                                local galaxies = hex_get_galaxy_centers()
+                                local galaxies = hex_filter_already_picked(hex_get_galaxy_centers(), big_bang_picked)
                                 if #galaxies > 0 then
                                     chosen_key = galaxies[math.random(#galaxies)].key
                                 end
                             end
 
                             if not chosen_key then
-                                local stars = hex_get_star_centers()
+                                local stars = hex_filter_already_picked(hex_get_star_centers(), big_bang_picked)
                                 if #stars > 0 then
                                     chosen_key = stars[math.random(#stars)].key
                                 end
                             end
 
                             if chosen_key then
+                                big_bang_picked[chosen_key] = true
+
                                 local new_card = SMODS.create_card({
                                     key = chosen_key,
                                     area = G.consumeables
@@ -7437,7 +7469,7 @@ function add_round_eval_row(config)
 
         if bonus > 0 then
             G.GAME.hex_cash_out_paid_round = G.GAME.round
-            config.dollars = (config.dollars or 0) + bonus
+            config.dollars = to_big(config.dollars or 0) + big(bonus) -- CHANGED: was (config.dollars or 0) + bonus
 
             if rigil_bonus > 0 then
                 hex_old_add_round_eval_row({
@@ -8296,14 +8328,14 @@ SMODS.Consumable{
     end,
 
     use = function(self, card)
-        local dollars = (G.GAME and G.GAME.dollars) or 0
-        local gain = math.min(100, math.floor(dollars / 10))
+        local dollars_plain = hex_to_plain_number(G.GAME.dollars or 0)
+        local gain = math.min(100, math.floor(dollars_plain / 10))
 
         if gain > 0 then
             G.GAME.hex_points = (G.GAME.hex_points or big(0)) + big(gain)
         end
 
-        G.GAME.dollars = math.floor(dollars / 10)
+        G.GAME.dollars = big(math.floor(dollars_plain / 10))
 
         card_eval_status_text(card, "extra", nil, nil, nil, {
             message = "+" .. tostring(gain) .. " Hex",
@@ -9617,7 +9649,7 @@ SMODS.Consumable{
     end,
 
     use = function(self, card)
-        G.GAME.dollars = math.floor((G.GAME.dollars or 0) * 10)
+        G.GAME.dollars = to_big(G.GAME.dollars or 0) * big(10)
 
         card_eval_status_text(card, "extra", nil, nil, nil, {
             message = "X10 Money",
@@ -10093,7 +10125,7 @@ SMODS.Consumable{
         end
 
         -- Money
-        G.GAME.dollars = 0
+        G.GAME.dollars = big(0)
 
         card_eval_status_text(card, "extra", nil, nil, nil, {
             message = "Cosmics Unlocked!",
@@ -10650,16 +10682,10 @@ SMODS.Consumable{
     end,
 
     use = function(self, card)
-        -- Multiplication itself is done in OmegaNum space (to_big/big),
-        -- then best-effort converted back down to a plain Lua number for
-        -- G.GAME.dollars -- unlike Hex points, dollars is a vanilla,
-        -- UI-bound plain-number field (the money counter/shop code all
-        -- read/write it as an ordinary Lua number), so it can't be left
-        -- as an OmegaNum cdata value the way hex_points can.
         local current = to_big((G.GAME and G.GAME.dollars) or 0)
         local result = current * big(1729)
 
-        G.GAME.dollars = hex_to_plain_number(result)
+        G.GAME.dollars = result -- CHANGED: was hex_to_plain_number(result) -- keep it big now that dollars itself is OmegaNum
 
         card_eval_status_text(card, "extra", nil, nil, nil, {
             message = "X1729 Money",
@@ -11875,7 +11901,7 @@ SMODS.Consumable{
         G.GAME.hex_pinwheel_bonus_limit = (G.GAME.hex_pinwheel_bonus_limit or 0) + 3
 
         -- Money
-        G.GAME.dollars = math.floor((G.GAME.dollars or 0) * 50)
+        G.GAME.dollars = to_big(G.GAME.dollars or 0) * big(50) 
 
         G.GAME.hex_rituals_used = G.GAME.hex_rituals_used or {}
         G.GAME.hex_rituals_used["ascension"] = true
@@ -13448,7 +13474,6 @@ end
 local function hex_owns_joker(key)
     return #SMODS.find_card(key) > 0
 end
-
 G.FUNCS.summon_transcendental = function()
 
     if not G.GAME then return end
@@ -13463,12 +13488,14 @@ G.FUNCS.summon_transcendental = function()
         return
     end
 
+    local showman_owned = hex_has_showman()
+
     local transcendental_jokers = {}
 
     for _, center in pairs(G.P_CENTERS) do
         if center.set == "Joker"
         and center.rarity == R_HEX_TRANSCENDENTAL.key
-        and not hex_owns_joker(center.key) then -- Mythic+ rarities are always capped at one copy each, even with Showman
+        and (showman_owned or not hex_owns_joker(center.key)) then -- Mythic+ rarities are capped at one copy each, UNLESS Showman is owned
             transcendental_jokers[#transcendental_jokers + 1] = center.key
         end
     end
@@ -13506,7 +13533,6 @@ G.FUNCS.summon_transcendental = function()
         end
     }))
 end
-
 G.FUNCS.summon_divine = function()
 
     if not G.GAME then return end
@@ -13521,13 +13547,15 @@ G.FUNCS.summon_divine = function()
         return
     end
 
+    local showman_owned = hex_has_showman()
+
     local divine_jokers = {}
 
     for _, center in pairs(G.P_CENTERS) do
         if center.set == "Joker"
         and center.rarity == R_HEX_DIVINE.key
         and center.key ~= ("j_" .. mod.prefix .. "_inaccessible") -- Inaccessible can never be summoned via this button; it must be earned normally
-        and not hex_owns_joker(center.key) then -- Divine Jokers are capped at one copy each, even with Showman
+        and (showman_owned or not hex_owns_joker(center.key)) then -- Divine Jokers are capped at one copy each, UNLESS Showman is owned
             divine_jokers[#divine_jokers + 1] = center.key
         end
     end
@@ -13955,9 +13983,355 @@ end
 
 
 
+-- Overstock Plus Plus (and any other +voucher-slot source) can put 2+
+-- voucher slots in the shop at once -- but get_next_voucher_key has no
+-- awareness of other slots being filled in that same shop, so it can
+-- independently roll the same voucher into both. Wrapping it here to
+-- check against whatever's already sitting in G.shop_vouchers.cards at
+-- the moment each slot is filled -- the same "check what's already
+-- there and resample" approach hex_filter_already_picked already uses
+-- for Star/Galaxy pack slots elsewhere in this file, just applied
+-- directly against the live shop CardArea instead of a picked-table,
+-- since voucher slots are filled one at a time straight into
+-- G.shop_vouchers rather than all at once from a single candidate list.
+local hex_old_get_next_voucher_key = get_next_voucher_key
+
+function get_next_voucher_key(_from_tag)
+    local center = hex_old_get_next_voucher_key(_from_tag)
+
+    if G.shop_vouchers and G.shop_vouchers.cards and #G.shop_vouchers.cards > 0 then
+        local already_in_shop = {}
+        for _, c in ipairs(G.shop_vouchers.cards) do
+            if c.config and c.config.center and c.config.center.key then
+                already_in_shop[c.config.center.key] = true
+            end
+        end
+
+        local it = 1
+        -- Cap the resample attempts so a genuinely tiny remaining pool
+        -- (e.g. very late-run, most vouchers already bought) can never
+        -- loop forever -- falls back to whatever was last rolled if it
+        -- can't find a free one in a reasonable number of tries.
+        while already_in_shop[center] and it < 20 do
+            it = it + 1
+            center = hex_old_get_next_voucher_key(_from_tag)
+        end
+    end
+
+    return center
+end
+
+
+function ease_dollars(mod, instant)
+    local function _mod(mod)
+        local dollar_UI = G.HUD:get_UIE_by_ID('dollar_text_UI')
+        mod = to_big(mod or 0)
+
+        local text = '+'..localize('$')
+        local col = G.C.MONEY
+
+        if mod < big(0) then
+            text = '-'..localize('$')
+            col = G.C.RED
+        else
+            -- Career stat tracking is a plain-number accumulator, so this
+            -- is a best-effort conversion (same caveat as high-score
+            -- tracking below) -- fine for normal play, just won't stay
+            -- accurate once gains blow past double-precision range.
+            inc_career_stat('c_dollars_earned', hex_to_plain_number(mod))
+        end
+
+        -- Keep the actual balance in OmegaNum space the whole time.
+        G.GAME.dollars = to_big(G.GAME.dollars or 0) + mod
+
+        -- check_and_set_high_score stores/compares a plain Lua number --
+        -- best-effort converted down, same as inc_career_stat above.
+        check_and_set_high_score('most_money', hex_to_plain_number(G.GAME.dollars))
+
+        check_for_unlock({type = 'money'})
+        dollar_UI.config.object:update()
+        G.HUD:recalculate()
+
+        local abs_mod = (mod < big(0)) and (big(0) - mod) or mod
+
+        attention_text({
+          text = text..hex_format_dollars(abs_mod),
+          scale = 0.8, 
+          hold = 0.7,
+          cover = dollar_UI.parent,
+          cover_colour = col,
+          align = 'cm',
+          })
+
+        play_sound('coin1')
+    end
+    if instant then
+        _mod(mod)
+    else
+        G.E_MANAGER:add_event(Event({
+        trigger = 'immediate',
+        func = function()
+            _mod(mod)
+            return true
+        end
+        }))
+    end
+end
 
 
 
+
+G.FUNCS.evaluate_round = function()
+    local pitch = 0.95
+    local dollars = big(0) -- CHANGED: was 0, now OmegaNum-safe accumulator
+
+    if G.GAME.chips - G.GAME.blind.chips >= 0 then
+        add_round_eval_row({dollars = G.GAME.blind.dollars, name='blind1', pitch = pitch})
+        pitch = pitch + 0.06
+        dollars = dollars + big(G.GAME.blind.dollars) -- CHANGED
+    else
+        add_round_eval_row({dollars = 0, name='blind1', pitch = pitch, saved = true})
+        pitch = pitch + 0.06
+    end
+
+    G.E_MANAGER:add_event(Event({
+        trigger = 'before',
+        delay = 1.3*math.min(G.GAME.blind.dollars+2, 7)/2*0.15 + 0.5,
+        func = function()
+          G.GAME.blind:defeat()
+          return true
+        end
+      }))
+    delay(0.2)
+    G.E_MANAGER:add_event(Event({
+        func = function()
+            ease_background_colour_blind(G.STATES.ROUND_EVAL, '')
+            return true
+        end
+    }))
+    G.GAME.selected_back:trigger_effect({context = 'eval'})
+
+    if G.GAME.current_round.hands_left > 0 and not G.GAME.modifiers.no_extra_hand_money then
+        local hand_bonus = G.GAME.current_round.hands_left*(G.GAME.modifiers.money_per_hand or 1)
+        add_round_eval_row({dollars = hand_bonus, disp = G.GAME.current_round.hands_left, bonus = true, name='hands', pitch = pitch})
+        pitch = pitch + 0.06
+        dollars = dollars + big(hand_bonus) -- CHANGED
+    end
+    if G.GAME.current_round.discards_left > 0 and G.GAME.modifiers.money_per_discard then
+        local discard_bonus = G.GAME.current_round.discards_left*(G.GAME.modifiers.money_per_discard)
+        add_round_eval_row({dollars = discard_bonus, disp = G.GAME.current_round.discards_left, bonus = true, name='discards', pitch = pitch})
+        pitch = pitch + 0.06
+        dollars = dollars + big(discard_bonus) -- CHANGED
+    end
+    for i = 1, #G.jokers.cards do
+        local ret = G.jokers.cards[i]:calculate_dollar_bonus()
+        if ret then
+            add_round_eval_row({dollars = ret, bonus = true, name='joker'..i, pitch = pitch, card = G.jokers.cards[i]})
+            pitch = pitch + 0.06
+            dollars = dollars + big(ret) -- CHANGED
+        end
+    end
+    for i = 1, #G.GAME.tags do
+        local ret = G.GAME.tags[i]:apply_to_run({type = 'eval'})
+        if ret then
+            add_round_eval_row({dollars = ret.dollars, bonus = true, name='tag'..i, pitch = pitch, condition = ret.condition, pos = ret.pos, tag = ret.tag})
+            pitch = pitch + 0.06
+            dollars = dollars + big(ret.dollars) -- CHANGED
+        end
+    end
+    if G.GAME.dollars >= big(5) and not G.GAME.modifiers.no_interest then -- CHANGED: big(5), relies on OmegaNum's own >= metamethod
+        -- CHANGED: down-cast G.GAME.dollars to a plain number just for this
+        -- ratio -- always saturates safely via math.min against
+        -- interest_cap/5 even at absurd OmegaNum balances (hex_to_plain_number
+        -- returns math.huge past double-precision range, and math.min(huge, cap)
+        -- still correctly returns cap).
+        local dollars_plain = hex_to_plain_number(G.GAME.dollars)
+        local interest_units = math.min(math.floor(dollars_plain/5), G.GAME.interest_cap/5)
+        local interest_gain = G.GAME.interest_amount*interest_units
+
+        add_round_eval_row({bonus = true, name='interest', pitch = pitch, dollars = interest_gain})
+        pitch = pitch + 0.06
+        if not G.GAME.seeded and not G.GAME.challenge then
+            if interest_gain == G.GAME.interest_amount*G.GAME.interest_cap/5 then 
+                G.PROFILES[G.SETTINGS.profile].career_stats.c_round_interest_cap_streak = G.PROFILES[G.SETTINGS.profile].career_stats.c_round_interest_cap_streak + 1
+            else
+                G.PROFILES[G.SETTINGS.profile].career_stats.c_round_interest_cap_streak = 0
+            end
+        end
+        check_for_unlock({type = 'interest_streak'})
+        dollars = dollars + big(interest_gain) -- CHANGED
+    end
+
+    pitch = pitch + 0.06
+
+    add_round_eval_row({name = 'bottom', dollars = dollars})
+end
+
+
+
+
+function add_round_eval_row(config)
+    local config = config or {}
+    local width = G.round_eval.T.w - 0.51
+    local num_dollars = hex_to_plain_number(config.dollars or 1)
+    local scale = 0.9
+
+    if config.name ~= 'bottom' then
+        if config.name ~= 'blind1' then
+            if not G.round_eval.divider_added then 
+                G.E_MANAGER:add_event(Event({
+                    trigger = 'after',delay = 0.25,
+                    func = function() 
+                        local spacer = {n=G.UIT.R, config={align = "cm", minw = width}, nodes={
+                            {n=G.UIT.O, config={object = DynaText({string = {'......................................'}, colours = {G.C.WHITE},shadow = true, float = true, y_offset = -30, scale = 0.45, spacing = 13.5, font = G.LANGUAGES['en-us'].font, pop_in = 0})}}
+                        }}
+                        G.round_eval:add_child(spacer,G.round_eval:get_UIE_by_ID(config.bonus and 'bonus_round_eval' or 'base_round_eval'))
+                        return true
+                    end
+                }))
+                delay(0.6)
+                G.round_eval.divider_added = true
+            end
+        else
+            delay(0.2)
+        end
+
+        delay(0.2)
+
+        G.E_MANAGER:add_event(Event({
+            trigger = 'before',delay = 0.5,
+            func = function()
+                --Add the far left text and context first:
+                local left_text = {}
+                if config.name == 'blind1' then
+                    local stake_sprite = get_stake_sprite(G.GAME.stake or 1, 0.5)
+                    local blind_sprite = AnimatedSprite(0, 0, 1.2,1.2, G.ANIMATION_ATLAS['blind_chips'], copy_table(G.GAME.blind.pos))
+                    blind_sprite:define_draw_steps({
+                        {shader = 'dissolve', shadow_height = 0.05},
+                        {shader = 'dissolve'}
+                    })
+                    table.insert(left_text, {n=G.UIT.O, config={w=1.2,h=1.2 , object = blind_sprite, hover = true, can_collide = false}})
+  
+                    table.insert(left_text,                  
+                    config.saved and 
+                    {n=G.UIT.C, config={padding = 0.05, align = 'cm'}, nodes={
+                        {n=G.UIT.R, config={align = 'cm'}, nodes={
+                            {n=G.UIT.O, config={object = DynaText({string = {' '..localize('ph_mr_bones')..' '}, colours = {G.C.FILTER}, shadow = true, pop_in = 0, scale = 0.5*scale, silent = true})}}
+                        }}
+                    }}
+                    or {n=G.UIT.C, config={padding = 0.05, align = 'cm'}, nodes={
+                        {n=G.UIT.R, config={align = 'cm'}, nodes={
+                            {n=G.UIT.O, config={object = DynaText({string = {' '..localize('ph_score_at_least')..' '}, colours = {G.C.UI.TEXT_LIGHT}, shadow = true, pop_in = 0, scale = 0.4*scale, silent = true})}}
+                        }},
+                        {n=G.UIT.R, config={align = 'cm', minh = 0.8}, nodes={
+                            {n=G.UIT.O, config={w=0.5,h=0.5 , object = stake_sprite, hover = true, can_collide = false}},
+                            {n=G.UIT.T, config={text = G.GAME.blind.chip_text, scale = scale_number(G.GAME.blind.chips, scale, 100000), colour = G.C.RED, shadow = true}}
+                        }}
+                    }}) 
+                elseif string.find(config.name, 'tag') then
+                    local blind_sprite = Sprite(0, 0, 0.7,0.7, G.ASSET_ATLAS['tags'], copy_table(config.pos))
+                    blind_sprite:define_draw_steps({
+                        {shader = 'dissolve', shadow_height = 0.05},
+                        {shader = 'dissolve'}
+                    })
+                    blind_sprite:juice_up()
+                    table.insert(left_text, {n=G.UIT.O, config={w=0.7,h=0.7 , object = blind_sprite, hover = true, can_collide = false}})
+                    table.insert(left_text, {n=G.UIT.O, config={object = DynaText({string = {config.condition}, colours = {G.C.UI.TEXT_LIGHT}, shadow = true, pop_in = 0, scale = 0.4*scale, silent = true})}})                   
+                elseif config.name == 'hands' then
+                    table.insert(left_text, {n=G.UIT.T, config={text = config.disp or config.dollars, scale = 0.8*scale, colour = G.C.BLUE, shadow = true, juice = true}})
+                    table.insert(left_text, {n=G.UIT.O, config={object = DynaText({string = {" "..localize{type = 'variable', key = 'remaining_hand_money', vars = {G.GAME.modifiers.money_per_hand or 1}}}, colours = {G.C.UI.TEXT_LIGHT}, shadow = true, pop_in = 0, scale = 0.4*scale, silent = true})}})
+                elseif config.name == 'discards' then
+                    table.insert(left_text, {n=G.UIT.T, config={text = config.disp or config.dollars, scale = 0.8*scale, colour = G.C.RED, shadow = true, juice = true}})
+                    table.insert(left_text, {n=G.UIT.O, config={object = DynaText({string = {" "..localize{type = 'variable', key = 'remaining_discard_money', vars = {G.GAME.modifiers.money_per_discard or 0}}}, colours = {G.C.UI.TEXT_LIGHT}, shadow = true, pop_in = 0, scale = 0.4*scale, silent = true})}})
+                elseif string.find(config.name, 'joker') then
+                    table.insert(left_text, {n=G.UIT.O, config={object = DynaText({string = localize{type = 'name_text', set = config.card.config.center.set, key = config.card.config.center.key}, colours = {G.C.FILTER}, shadow = true, pop_in = 0, scale = 0.6*scale, silent = true})}})
+                elseif config.name == 'interest' then
+                    table.insert(left_text, {n=G.UIT.T, config={text = num_dollars, scale = 0.8*scale, colour = G.C.MONEY, shadow = true, juice = true}})
+                    table.insert(left_text,{n=G.UIT.O, config={object = DynaText({string = {" "..localize{type = 'variable', key = 'interest', vars = {G.GAME.interest_amount, 5, G.GAME.interest_amount*G.GAME.interest_cap/5}}}, colours = {G.C.UI.TEXT_LIGHT}, shadow = true, pop_in = 0, scale = 0.4*scale, silent = true})}})
+                end
+                local full_row = {n=G.UIT.R, config={align = "cm", minw = 5}, nodes={
+                    {n=G.UIT.C, config={padding = 0.05, minw = width*0.55, minh = 0.61, align = "cl"}, nodes=left_text},
+                    {n=G.UIT.C, config={padding = 0.05,minw = width*0.45, align = "cr"}, nodes={{n=G.UIT.C, config={align = "cm", id = 'dollar_'..config.name},nodes={}}}}
+                }}
+        
+                if config.name == 'blind1' then
+                    G.GAME.blind:juice_up()
+                end
+                G.round_eval:add_child(full_row,G.round_eval:get_UIE_by_ID(config.bonus and 'bonus_round_eval' or 'base_round_eval'))
+                play_sound('cancel', config.pitch or 1)
+                play_sound('highlight1',( 1.5*config.pitch) or 1, 0.2)
+                if config.card then config.card:juice_up(0.7, 0.46) end
+                return true
+            end
+        }))
+        local dollar_row = 0
+        if num_dollars > 60 then -- change if need
+            G.E_MANAGER:add_event(Event({
+                trigger = 'before',delay = 0.38,
+                func = function()
+                    G.round_eval:add_child(
+                            {n=G.UIT.R, config={align = "cm", id = 'dollar_row_'..(dollar_row+1)..'_'..config.name}, nodes={
+                                {n=G.UIT.O, config={object = DynaText({string = {localize('$')..hex_format_dollars(config.dollars or 1)}, colours = {G.C.MONEY}, shadow = true, pop_in = 0, scale = 0.65, float = true})}} -- CHANGED: hex_format_dollars(config.dollars or 1) instead of raw num_dollars
+                            }},
+                            G.round_eval:get_UIE_by_ID('dollar_'..config.name))
+
+                    play_sound('coin3', 0.9+0.2*math.random(), 0.7)
+                    play_sound('coin6', 1.3, 0.8)
+                    return true
+                end
+            }))
+        else
+            for i = 1, num_dollars or 1 do
+                G.E_MANAGER:add_event(Event({
+                    trigger = 'before',delay = 0.18 - ((num_dollars > 20 and 0.13) or (num_dollars > 9 and 0.1) or 0),
+                    func = function()
+                        if i%30 == 1 then 
+                            G.round_eval:add_child(
+                                {n=G.UIT.R, config={align = "cm", id = 'dollar_row_'..(dollar_row+1)..'_'..config.name}, nodes={}},
+                                G.round_eval:get_UIE_by_ID('dollar_'..config.name))
+                                dollar_row = dollar_row+1
+                        end
+
+                        local r = {n=G.UIT.T, config={text = localize('$'), colour = G.C.MONEY, scale = ((num_dollars > 20 and 0.28) or (num_dollars > 9 and 0.43) or 0.58), shadow = true, hover = true, can_collide = false, juice = true}}
+                        play_sound('coin3', 0.9+0.2*math.random(), 0.7 - (num_dollars > 20 and 0.2 or 0))
+                        
+                        if config.name == 'blind1' then 
+                            G.GAME.current_round.dollars_to_be_earned = G.GAME.current_round.dollars_to_be_earned:sub(2)
+                        end
+
+                        G.round_eval:add_child(r,G.round_eval:get_UIE_by_ID('dollar_row_'..(dollar_row)..'_'..config.name))
+                        G.VIBRATION = G.VIBRATION + 0.4
+                        return true
+                    end
+                }))
+            end
+        end
+    else
+        delay(0.4)
+        G.E_MANAGER:add_event(Event({
+            trigger = 'before',delay = 0.5,
+            func = function()
+                UIBox{
+                    definition = {n=G.UIT.ROOT, config={align = 'cm', colour = G.C.CLEAR}, nodes={
+                        {n=G.UIT.R, config={id = 'cash_out_button', align = "cm", padding = 0.1, minw = 7, r = 0.15, colour = G.C.ORANGE, shadow = true, hover = true, one_press = true, button = 'cash_out', focus_args = {snap_to = true}}, nodes={
+                            {n=G.UIT.T, config={text = localize('b_cash_out')..": ", scale = 1, colour = G.C.UI.TEXT_LIGHT, shadow = true}},
+                            {n=G.UIT.T, config={text = localize('$')..hex_format_dollars(config.dollars), scale = 1.2*scale, colour = G.C.WHITE, shadow = true, juice = true}} -- CHANGED: hex_format_dollars(config.dollars) instead of raw config.dollars
+                    }},}},
+                    config = {
+                      align = 'tmi',
+                      offset ={x=0,y=0.4},
+                      major = G.round_eval}
+                }
+
+                G.GAME.current_round.dollars = config.dollars
+                
+                play_sound('coin6', config.pitch or 1)
+                G.VIBRATION = G.VIBRATION + 1
+                return true
+            end
+        }))
+    end
+end
 
 
 
