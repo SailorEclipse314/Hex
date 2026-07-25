@@ -55,41 +55,34 @@ local function hex_to_plain_number(value)
     return n or 0
 end
 
--- Formats a (possibly big/OmegaNum) Hex point value for the on-screen
--- counter. Values at or below 9,999,999,999 are shown as a plain integer;
--- anything past that switches to scientific notation with exactly 2
--- digits after the decimal point (e.g. "1.00e21"), so the counter never
--- grows into an unreadable wall of digits once Hex points start scaling
--- past double-precision-friendly ranges.
-local HEX_DISPLAY_SCI_THRESHOLD = 9999999999
 
+-- Formats a (possibly big/OmegaNum) Hex point value using Amulet's own
+-- number_format function -- the same function OmegaMeta.__tostring calls
+-- internally, so this is exactly what you'd get from tostring(value) on
+-- a big number, just called directly rather than going through the
+-- metamethod indirection.
 local function hex_format_points(value)
-    local n = hex_to_plain_number(value)
-
-    if n ~= n then -- NaN guard
-        n = 0
+    local big_value = value
+    if to_big then
+        local ok, bv = pcall(to_big, value)
+        if ok and bv ~= nil then big_value = bv end
     end
 
-    if math.abs(n) <= HEX_DISPLAY_SCI_THRESHOLD then
-        return tostring(math.floor(n))
+    if number_format then
+        local ok, result = pcall(number_format, big_value)
+        if ok and type(result) == "string" then
+            return result
+        end
     end
 
-    local exponent = math.floor(math.log(math.abs(n), 10))
-    local mantissa = n / (10 ^ exponent)
+    -- Fallback, only reached if number_format isn't available for some
+    -- reason (e.g. Amulet not loaded) -- plain tostring still works since
+    -- to_big() hands back an ordinary number in that case too.
+    return tostring(big_value)
+end
 
-    -- Round the mantissa to 2 decimals first, then correct for rounding
-    -- pushing it to/past 10 (e.g. 9.999 -> "10.00e5" should be "1.00e6").
-    mantissa = tonumber(string.format("%.2f", mantissa))
-
-    if math.abs(mantissa) >= 10 then
-        mantissa = mantissa / 10
-        exponent = exponent + 1
-    elseif mantissa ~= 0 and math.abs(mantissa) < 1 then
-        mantissa = mantissa * 10
-        exponent = exponent - 1
-    end
-
-    return string.format("%.2fe%d", mantissa, exponent)
+local function hex_format_dollars(value)
+    return hex_format_points(value)
 end
 
 -- Vanilla's default cap on how many cards can be highlighted at once to
@@ -7469,8 +7462,8 @@ function add_round_eval_row(config)
 
         if bonus > 0 then
             G.GAME.hex_cash_out_paid_round = G.GAME.round
-            config.dollars = to_big(config.dollars or 0) + big(bonus) -- CHANGED: was (config.dollars or 0) + bonus
-
+            config.dollars = to_big(config.dollars or 0):add(big(bonus))
+            
             if rigil_bonus > 0 then
                 hex_old_add_round_eval_row({
                     name = 'joker_hex_rigil_kentaurus',
@@ -8332,7 +8325,7 @@ SMODS.Consumable{
         local gain = math.min(100, math.floor(dollars_plain / 10))
 
         if gain > 0 then
-            G.GAME.hex_points = (G.GAME.hex_points or big(0)) + big(gain)
+            G.GAME.hex_points = (G.GAME.hex_points or big(0)):add(big(gain))
         end
 
         G.GAME.dollars = big(math.floor(dollars_plain / 10))
@@ -9649,7 +9642,7 @@ SMODS.Consumable{
     end,
 
     use = function(self, card)
-        G.GAME.dollars = to_big(G.GAME.dollars or 0) * big(10)
+        G.GAME.dollars = to_big(G.GAME.dollars or 0):mul(big(10))
 
         card_eval_status_text(card, "extra", nil, nil, nil, {
             message = "X10 Money",
@@ -10683,7 +10676,7 @@ SMODS.Consumable{
 
     use = function(self, card)
         local current = to_big((G.GAME and G.GAME.dollars) or 0)
-        local result = current * big(1729)
+        local result = current:mul(big(1729))
 
         G.GAME.dollars = result -- CHANGED: was hex_to_plain_number(result) -- keep it big now that dollars itself is OmegaNum
 
@@ -11901,7 +11894,7 @@ SMODS.Consumable{
         G.GAME.hex_pinwheel_bonus_limit = (G.GAME.hex_pinwheel_bonus_limit or 0) + 3
 
         -- Money
-        G.GAME.dollars = to_big(G.GAME.dollars or 0) * big(50) 
+        G.GAME.dollars = to_big(G.GAME.dollars or 0):mul(big(50))
 
         G.GAME.hex_rituals_used = G.GAME.hex_rituals_used or {}
         G.GAME.hex_rituals_used["ascension"] = true
@@ -14042,7 +14035,7 @@ function ease_dollars(mod, instant)
         end
 
         -- Keep the actual balance in OmegaNum space the whole time.
-        G.GAME.dollars = to_big(G.GAME.dollars or 0) + mod
+        G.GAME.dollars = to_big(G.GAME.dollars or 0):add(mod)
 
         -- check_and_set_high_score stores/compares a plain Lua number --
         -- best-effort converted down, same as inc_career_stat above.
@@ -14088,7 +14081,7 @@ G.FUNCS.evaluate_round = function()
     if G.GAME.chips - G.GAME.blind.chips >= 0 then
         add_round_eval_row({dollars = G.GAME.blind.dollars, name='blind1', pitch = pitch})
         pitch = pitch + 0.06
-        dollars = dollars + big(G.GAME.blind.dollars) -- CHANGED
+        dollars = dollars:add(big(G.GAME.blind.dollars))
     else
         add_round_eval_row({dollars = 0, name='blind1', pitch = pitch, saved = true})
         pitch = pitch + 0.06
@@ -14115,20 +14108,20 @@ G.FUNCS.evaluate_round = function()
         local hand_bonus = G.GAME.current_round.hands_left*(G.GAME.modifiers.money_per_hand or 1)
         add_round_eval_row({dollars = hand_bonus, disp = G.GAME.current_round.hands_left, bonus = true, name='hands', pitch = pitch})
         pitch = pitch + 0.06
-        dollars = dollars + big(hand_bonus) -- CHANGED
+        dollars = dollars:add(big(hand_bonus))
     end
     if G.GAME.current_round.discards_left > 0 and G.GAME.modifiers.money_per_discard then
         local discard_bonus = G.GAME.current_round.discards_left*(G.GAME.modifiers.money_per_discard)
         add_round_eval_row({dollars = discard_bonus, disp = G.GAME.current_round.discards_left, bonus = true, name='discards', pitch = pitch})
         pitch = pitch + 0.06
-        dollars = dollars + big(discard_bonus) -- CHANGED
+        dollars = dollars:add(big(discard_bonus))
     end
     for i = 1, #G.jokers.cards do
         local ret = G.jokers.cards[i]:calculate_dollar_bonus()
         if ret then
             add_round_eval_row({dollars = ret, bonus = true, name='joker'..i, pitch = pitch, card = G.jokers.cards[i]})
             pitch = pitch + 0.06
-            dollars = dollars + big(ret) -- CHANGED
+            dollars = dollars:add(big(ret.dollars))
         end
     end
     for i = 1, #G.GAME.tags do
@@ -14159,7 +14152,7 @@ G.FUNCS.evaluate_round = function()
             end
         end
         check_for_unlock({type = 'interest_streak'})
-        dollars = dollars + big(interest_gain) -- CHANGED
+        dollars = dollars:add(big(interest_gain))
     end
 
     pitch = pitch + 0.06
