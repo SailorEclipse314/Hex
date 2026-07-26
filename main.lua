@@ -3130,11 +3130,52 @@ end
 
 
 
+-- Certificate Joker: full override. Vanilla implements this effect as a
+-- hardcoded name check inside Card:calculate_joker itself (not via a
+-- Center's own .calculate function) -- see the file's earlier comment
+-- history on this override for why that matters. This intercepts
+-- Card:calculate_joker directly (same technique the Perkeo override
+-- elsewhere in this file uses), runs our own exact copy of vanilla's
+-- effect, and returns without calling the original, so vanilla's own
+-- hardcoded branch never runs a second time alongside ours.
+--
+-- trigger = 'after' + a short delay (rather than the default 'immediate'
+-- trigger vanilla's own event uses) makes sure this card is created
+-- AFTER the normal start-of-round hand draw has already finished,
+-- instead of racing ahead of it.
+local hex_old_calculate_joker_certificate = Card.calculate_joker
 
+function Card:calculate_joker(context)
+    if self.ability and self.ability.name == 'Certificate' then
+        if context.first_hand_drawn and not context.blueprint then
+            G.E_MANAGER:add_event(Event({
+                func = function()
+                    local _card = create_playing_card({
+                        front = pseudorandom_element(G.P_CARDS, pseudoseed('cert_fr')),
+                        center = G.P_CENTERS.c_base}, G.hand, nil, nil, {G.C.SECONDARY_SET.Enhanced})
 
+                    local seal_type = pseudorandom(pseudoseed('certsl'))
+                    if seal_type > 0.75 then _card:set_seal('Red', true)
+                    elseif seal_type > 0.5 then _card:set_seal('Blue', true)
+                    elseif seal_type > 0.25 then _card:set_seal('Gold', true)
+                    else _card:set_seal('Purple', true)
+                    end
 
+                    G.GAME.blind:debuff_card(_card)
+                    G.hand:sort()
+                    if context.blueprint_card then context.blueprint_card:juice_up() else self:juice_up() end
+                    return true
+                end
+            }))
 
+            playing_card_joker_effects({true})
+        end
 
+        return
+    end
+
+    return hex_old_calculate_joker_certificate(self, context)
+end
 
 
 -- Colour used for the Immortal sticker's badge/description text, the
@@ -15232,42 +15273,60 @@ end
 
 
 -- Overstock Plus Plus (and any other +voucher-slot source) can put 2+
--- voucher slots in the shop at once -- but get_next_voucher_key has no
--- awareness of other slots being filled in that same shop, so it can
--- independently roll the same voucher into both. Wrapping it here to
--- check against whatever's already sitting in G.shop_vouchers.cards at
--- the moment each slot is filled -- the same "check what's already
--- there and resample" approach hex_filter_already_picked already uses
--- for Star/Galaxy pack slots elsewhere in this file, just applied
--- directly against the live shop CardArea instead of a picked-table,
--- since voucher slots are filled one at a time straight into
--- G.shop_vouchers rather than all at once from a single candidate list.
+-- voucher slots in the shop at once, and both slots' keys can get
+-- rolled before either card is actually created/emplaced -- so relying
+-- on G.shop_vouchers.cards (or on the G.shop_vouchers table's own
+-- identity, which turned out to be an unreliable "new shop" signal) to
+-- detect duplicates doesn't work.
+--
+-- Instead: track every voucher key WE'VE handed out since the shop was
+-- last (re)entered, using G.STATE transitioning into G.STATES.SHOP as
+-- the one unambiguous "this is a fresh shop" signal, and clear the
+-- tracking table right at that moment. Every get_next_voucher_key call
+-- in between (regardless of how many slots there are, or what order
+-- they're actually created/emplaced in) checks and updates that same
+-- table, so two slots rolled back-to-back can never end up with the
+-- same voucher.
+local hex_voucher_batch_keys = {}
+local hex_voucher_last_state = nil
+
+local hex_old_update_voucher_dedupe = Game.update
+function Game:update(dt)
+    hex_old_update_voucher_dedupe(self, dt)
+
+    if G.STATE == G.STATES.SHOP and hex_voucher_last_state ~= G.STATES.SHOP then
+        hex_voucher_batch_keys = {}
+    end
+    hex_voucher_last_state = G.STATE
+end
+
 local hex_old_get_next_voucher_key = get_next_voucher_key
 
 function get_next_voucher_key(_from_tag)
-    local center = hex_old_get_next_voucher_key(_from_tag)
-
-    if G.shop_vouchers and G.shop_vouchers.cards and #G.shop_vouchers.cards > 0 then
-        local already_in_shop = {}
+    -- Also fold in anything already actually emplaced, as a belt-and-
+    -- braces check in case a voucher ever gets added to the shop
+    -- through some other path that doesn't call this function.
+    if G.shop_vouchers and G.shop_vouchers.cards then
         for _, c in ipairs(G.shop_vouchers.cards) do
             if c.config and c.config.center and c.config.center.key then
-                already_in_shop[c.config.center.key] = true
+                hex_voucher_batch_keys[c.config.center.key] = true
             end
-        end
-
-        local it = 1
-        -- Cap the resample attempts so a genuinely tiny remaining pool
-        -- (e.g. very late-run, most vouchers already bought) can never
-        -- loop forever -- falls back to whatever was last rolled if it
-        -- can't find a free one in a reasonable number of tries.
-        while already_in_shop[center] and it < 20 do
-            it = it + 1
-            center = hex_old_get_next_voucher_key(_from_tag)
         end
     end
 
+    local center = hex_old_get_next_voucher_key(_from_tag)
+
+    local it = 1
+    while hex_voucher_batch_keys[center] and it < 20 do
+        it = it + 1
+        center = hex_old_get_next_voucher_key(_from_tag)
+    end
+
+    hex_voucher_batch_keys[center] = true
+
     return center
 end
+
 
 
 function ease_dollars(mod, instant)
