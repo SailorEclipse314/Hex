@@ -2466,79 +2466,6 @@ SMODS.Enhancement{
 
 
 
-local HEX_ENHANCEMENT_POOL_EXCLUDE = {
-    ["m_" .. mod.prefix .. "_crystal"] = true,
-    ["m_" .. mod.prefix .. "_platinum"] = true,
-    ["m_" .. mod.prefix .. "_ruby"] = true,
-    ["m_" .. mod.prefix .. "_sapphire"] = true,
-    ["m_" .. mod.prefix .. "_topaz"] = true,
-    ["m_" .. mod.prefix .. "_diamond"] = true,
-}
-
--- Custom Seals (Orange/Green/Pink/Black) should never be randomly rolled
--- onto a card by vanilla mechanisms -- e.g. Standard Packs' own "special"
--- seal chance, or the Certificate Joker's random-rank/suit/seal grant --
--- both of which build their candidate seal list from whatever seal keys
--- are currently registered, which now includes every custom seal this
--- mod adds via SMODS.Seal (Steamodded registers those into the same
--- G.P_SEALS pool as vanilla's own Gold/Red/Blue/Purple). Every one of
--- our custom seals is meant to be grant-only (via specific Star/Galaxy
--- cards, The Seal of Aces, etc.) -- seals have no should_apply hook the
--- way Stickers do (see Immortal's should_apply = false above for that
--- pattern), so this filters them out of the shared pseudorandom_element
--- roll instead, the same exclusion approach HEX_ENHANCEMENT_POOL_EXCLUDE
--- already uses just above for custom Enhancements.
-local HEX_SEAL_POOL_EXCLUDE = {
-    [mod.prefix .. "_orange"] = true,
-    [mod.prefix .. "_green"] = true,
-    [mod.prefix .. "_pink"] = true,
-    [mod.prefix .. "_black"] = true,
-}
-
-local hex_old_pseudorandom_element = pseudorandom_element
-
-function pseudorandom_element(_t, seed)
-    -- Detect "this is the Enhanced pool" by looking at what's actually
-    -- IN the table, rather than comparing table identity against
-    -- G.P_CENTER_POOLS.Enhanced -- if Steamodded ever hands Familiar/
-    -- Grim/Incantation/Shadow a rebuilt/derived table instead of the
-    -- literal same object, an identity check silently never matches
-    -- and nothing gets filtered.
-    if type(_t) == "table" and #_t > 0 and type(_t[1]) == "table" and _t[1].set == "Enhanced" then
-        local filtered = {}
-        for _, center in ipairs(_t) do
-            if not HEX_ENHANCEMENT_POOL_EXCLUDE[center.key] then
-                filtered[#filtered + 1] = center
-            end
-        end
-
-        if #filtered > 0 then
-            return hex_old_pseudorandom_element(filtered, seed)
-        end
-    end
-
-    -- Seal pools are plain string keys ("Gold", "Red", "Blue", "Purple",
-    -- plus every custom seal registered by this or any other mod) rather
-    -- than Center tables, so they're detected differently -- by checking
-    -- that the first element is a string which is actually a registered
-    -- seal key in G.P_SEALS.
-    if type(_t) == "table" and #_t > 0 and type(_t[1]) == "string" and G.P_SEALS and G.P_SEALS[_t[1]] then
-        local filtered = {}
-        for _, key in ipairs(_t) do
-            if not HEX_SEAL_POOL_EXCLUDE[key] then
-                filtered[#filtered + 1] = key
-            end
-        end
-
-        if #filtered > 0 then
-            return hex_old_pseudorandom_element(filtered, seed)
-        end
-    end
-
-    return hex_old_pseudorandom_element(_t, seed)
-end
-
-
 
 
 
@@ -3040,6 +2967,18 @@ SMODS.Seal{
                     trigger = "after",
                     delay = 0.1,
                     func = function()
+                        -- Re-check room here, at the moment this actually
+                        -- fires, not just back when it was scheduled --
+                        -- multiple Black Seals in hand can all pass the
+                        -- outer check in the same frame (before any of
+                        -- their delayed events have actually added a card
+                        -- yet), which could otherwise overflow past the
+                        -- consumable slot limit. This second check is what
+                        -- actually prevents that.
+                        if not (G.consumeables and #G.consumeables.cards < G.consumeables.config.card_limit) then
+                            return true
+                        end
+
                         -- NOTE: deliberately NOT calling new_card:add_to_deck()
                         -- here -- that call registers a card into the
                         -- playing-card/deck-tracking systems (G.playing_cards,
@@ -3083,6 +3022,107 @@ SMODS.Seal{
 
 
 
+local HEX_ENHANCEMENT_POOL_EXCLUDE = {
+    ["m_" .. mod.prefix .. "_crystal"] = true,
+    ["m_" .. mod.prefix .. "_platinum"] = true,
+    ["m_" .. mod.prefix .. "_ruby"] = true,
+    ["m_" .. mod.prefix .. "_sapphire"] = true,
+    ["m_" .. mod.prefix .. "_topaz"] = true,
+    ["m_" .. mod.prefix .. "_diamond"] = true,
+}
+
+-- Custom Seals (Orange/Green/Pink/Black) should never be randomly rolled
+-- onto a card by vanilla mechanisms -- e.g. Standard Packs' own "special"
+-- seal chance, or the Certificate Joker's random-rank/suit/seal grant --
+-- both of which build their candidate seal list from whatever seal keys
+-- are currently registered, which now includes every custom seal this
+-- mod adds via SMODS.Seal (Steamodded registers those into the same
+-- G.P_SEALS pool as vanilla's own Gold/Red/Blue/Purple). Every one of
+-- our custom seals is meant to be grant-only (via specific Star/Galaxy
+-- cards, The Seal of Aces, etc.) -- seals have no should_apply hook the
+-- way Stickers do (see Immortal's should_apply = false above for that
+-- pattern), so this filters them out of the shared pseudorandom_element
+-- roll instead, the same exclusion approach HEX_ENHANCEMENT_POOL_EXCLUDE
+-- already uses just above for custom Enhancements.
+local HEX_SEAL_POOL_EXCLUDE = {
+    [mod.prefix .. "_orange"] = true,
+    [mod.prefix .. "_green"] = true,
+    [mod.prefix .. "_pink"] = true,
+    [mod.prefix .. "_black"] = true,
+}
+
+
+
+-- Custom Seals are meant to be grant-only -- never randomly rolled by
+-- vanilla pack/shop generation. Excluding them from pseudorandom_element
+-- and stripping them post-creation (see the create_card/create_playing_card
+-- hooks) both turned out to be too late/unreliable, since vanilla applies
+-- a pack card's seal via its own direct Card:set_seal call at a point
+-- neither hook can intercept. So instead we block set_seal itself:
+-- a custom seal can only actually be applied while HEX_SEAL_ALLOW is
+-- true, which our own grant code (Oath/Cappella/Pistol Star/Triangulum
+-- Galaxy/etc.) flips on immediately before its own call and off right
+-- after. Anything else -- vanilla's random roll, any other mod -- gets
+-- silently ignored.
+local HEX_SEAL_ALLOW = false
+
+local hex_old_set_seal = Card.set_seal
+
+function Card:set_seal(seal, ...)
+    if seal and HEX_SEAL_POOL_EXCLUDE[seal] and not HEX_SEAL_ALLOW then
+        return
+    end
+    return hex_old_set_seal(self, seal, ...)
+end
+
+
+
+
+
+
+
+local hex_old_pseudorandom_element = pseudorandom_element
+
+function pseudorandom_element(_t, seed)
+    -- Detect "this is the Enhanced pool" by looking at what's actually
+    -- IN the table, rather than comparing table identity against
+    -- G.P_CENTER_POOLS.Enhanced -- if Steamodded ever hands Familiar/
+    -- Grim/Incantation/Shadow a rebuilt/derived table instead of the
+    -- literal same object, an identity check silently never matches
+    -- and nothing gets filtered.
+    if type(_t) == "table" and #_t > 0 and type(_t[1]) == "table" and _t[1].set == "Enhanced" then
+        local filtered = {}
+        for _, center in ipairs(_t) do
+            if not HEX_ENHANCEMENT_POOL_EXCLUDE[center.key] then
+                filtered[#filtered + 1] = center
+            end
+        end
+
+        if #filtered > 0 then
+            return hex_old_pseudorandom_element(filtered, seed)
+        end
+    end
+
+    -- Seal pools are plain string keys ("Gold", "Red", "Blue", "Purple",
+    -- plus every custom seal registered by this or any other mod) rather
+    -- than Center tables, so they're detected differently -- by checking
+    -- that the first element is a string which is actually a registered
+    -- seal key in G.P_SEALS.
+    if type(_t) == "table" and #_t > 0 and type(_t[1]) == "string" and G.P_SEALS and G.P_SEALS[_t[1]] then
+        local filtered = {}
+        for _, key in ipairs(_t) do
+            if not HEX_SEAL_POOL_EXCLUDE[key] then
+                filtered[#filtered + 1] = key
+            end
+        end
+
+        if #filtered > 0 then
+            return hex_old_pseudorandom_element(filtered, seed)
+        end
+    end
+
+    return hex_old_pseudorandom_element(_t, seed)
+end
 
 
 
@@ -3265,8 +3305,6 @@ SMODS.Voucher{
         text = {
             "{C:star}Star Packs{} can now",
             "appear in the shop",
-            "{C:inactive}(Half as often as{}",
-            "{C:inactive}Spectral packs){}",
         }
     },
 
@@ -3326,8 +3364,6 @@ SMODS.Voucher{
         text = {
             "{C:galaxy}Galaxy Packs{} can now",
             "appear in the shop",
-            "{C:inactive}(Half as often as{}",
-            "{C:inactive}Star Packs){}",
         }
     },
 
@@ -4250,6 +4286,40 @@ function create_card(_type, area, legendary, _rarity, skip_materialize, soulable
     return card
 end
 
+
+
+
+
+-- Standard Packs build their playing cards via create_playing_card, a
+-- completely separate function from create_card above (which only
+-- covers Jokers/consumables/pack-slot Tarot/Planet/Spectral draws) --
+-- Standard Pack's own enhancement/seal/edition rolls happen inside this
+-- function, and don't necessarily go through pseudorandom_element in a
+-- way the pseudorandom_element hook further up the file can reliably
+-- intercept. That's why custom seals were still slipping through there
+-- specifically. Same safety-net approach as the create_card hook's own
+-- seal strip: let vanilla do whatever it wants, then strip any custom
+-- seal off the result if the card was actually going into a pack.
+local old_create_playing_card = create_playing_card
+
+function create_playing_card(config, area, skip_materialize, disable_material, discover)
+    local card = old_create_playing_card(config, area, skip_materialize, disable_material, discover)
+
+    if area == G.pack_cards and card and card.seal and HEX_SEAL_POOL_EXCLUDE[card.seal] then
+        if card.set_seal then
+            card:set_seal(nil, true)
+        else
+            card.seal = nil
+        end
+    end
+
+    return card
+end
+
+
+
+
+
 SMODS.Back{
     key = "gamblers_deck",
 
@@ -4474,6 +4544,10 @@ local HEX_RITUAL_SHORT_KEYS = {
     "manifest",
     "ascension",
     "big_bang",
+    "big_crunch",
+    "big_rip",
+    "false_vacuum_decay",
+    "heat_death",
 }
 
 local old_start_run_ritualistic_deck = Game.start_run
@@ -6025,7 +6099,7 @@ SMODS.Joker{
     atlas = "HexJokers",
     pos = { x = 5, y = 0 }, -- placeholder art slot shared with the other undrawn Divine/Transcendental jokers
 
-    cost = 1e308,
+    cost = big(2e308),
     unlocked = true,
     discovered = true,
     blueprint_compat = false,
@@ -6173,7 +6247,7 @@ SMODS.Consumable{
     loc_txt = {
         name = "Covenant",
         text = {
-            "{C:green}1 in 4{} chance to give a",
+            "{C:green}#1# in 4{} chance to give a",
             "{C:attention}random{} Joker",
             "{C:attention}without an Edition{}",
             "{C:dark_edition}Prismatic{}, {C:dark_edition}Brilliant{},",
@@ -6185,7 +6259,17 @@ SMODS.Consumable{
         info_queue[#info_queue + 1] = G.P_CENTERS["e_" .. mod.prefix .. "_prismatic"]
         info_queue[#info_queue + 1] = G.P_CENTERS["e_" .. mod.prefix .. "_brilliant"]
         info_queue[#info_queue + 1] = G.P_CENTERS["e_" .. mod.prefix .. "_chromatic"]
-        return { vars = {} }
+
+        local prob_mod = (G.GAME and G.GAME.probabilities and G.GAME.probabilities.normal) or 1
+        local numer = 1 * prob_mod
+        local numer_display
+        if numer == math.floor(numer) then
+            numer_display = math.floor(numer)
+        else
+            numer_display = string.format("%.2f", numer)
+        end
+
+        return { vars = { numer_display } }
     end,
 
     can_use = function(self, card)
@@ -6201,7 +6285,8 @@ SMODS.Consumable{
     end,
 
     use = function(self, card)
-        if pseudorandom(pseudoseed(mod.prefix .. "_covenant_chance")) < (1 / 4) then
+        local prob_mod = (G.GAME and G.GAME.probabilities and G.GAME.probabilities.normal) or 1
+        if pseudorandom(pseudoseed(mod.prefix .. "_covenant_chance")) < (1 / 4) * prob_mod then
             if not (G.jokers and G.jokers.cards) then return end
 
             local eligible = {}
@@ -6282,7 +6367,9 @@ SMODS.Consumable{
         if not (G.hand and G.hand.highlighted and G.hand.highlighted[1]) then return end
 
         local target = G.hand.highlighted[1]
+        HEX_SEAL_ALLOW = true
         target:set_seal(mod.prefix .. "_pink", true)
+        HEX_SEAL_ALLOW = false
 
         card_eval_status_text(target, "extra", nil, nil, nil, {
             message = "Pink Seal",
@@ -6312,7 +6399,7 @@ SMODS.Consumable{
     loc_txt = {
         name = "Prism",
         text = {
-            "{C:green}1 in 3{} chance to give",
+            "{C:green}#1# in 3{} chance to give",
             "{C:attention}1{} selected playing card",
             "the {C:dark_edition}Prismatic{} edition",
         }
@@ -6320,7 +6407,17 @@ SMODS.Consumable{
 
     loc_vars = function(self, info_queue, card)
         info_queue[#info_queue + 1] = G.P_CENTERS["e_" .. mod.prefix .. "_prismatic"]
-        return { vars = {} }
+
+        local prob_mod = (G.GAME and G.GAME.probabilities and G.GAME.probabilities.normal) or 1
+        local numer = 1 * prob_mod
+        local numer_display
+        if numer == math.floor(numer) then
+            numer_display = math.floor(numer)
+        else
+            numer_display = string.format("%.2f", numer)
+        end
+
+        return { vars = { numer_display } }
     end,
 
     can_use = function(self, card)
@@ -6332,7 +6429,8 @@ SMODS.Consumable{
 
         local target = G.hand.highlighted[1]
 
-        if pseudorandom(pseudoseed(mod.prefix .. "_prism_chance")) < (1 / 3) then
+        local prob_mod = (G.GAME and G.GAME.probabilities and G.GAME.probabilities.normal) or 1
+        if pseudorandom(pseudoseed(mod.prefix .. "_prism_chance")) < (1 / 3) * prob_mod then
             target:set_edition({ [mod.prefix .. "_prismatic"] = true }, true)
 
             card_eval_status_text(target, "extra", nil, nil, nil, {
@@ -6416,7 +6514,7 @@ SMODS.Consumable{
     loc_txt = {
         name = "Shine",
         text = {
-            "{C:green}1 in 2{} chance to give",
+            "{C:green}#1# in 2{} chance to give",
             "{C:attention}1{} selected playing card",
             "the {C:dark_edition}Brilliant{} edition",
         }
@@ -6424,7 +6522,17 @@ SMODS.Consumable{
 
     loc_vars = function(self, info_queue, card)
         info_queue[#info_queue + 1] = G.P_CENTERS["e_" .. mod.prefix .. "_brilliant"]
-        return { vars = {} }
+
+        local prob_mod = (G.GAME and G.GAME.probabilities and G.GAME.probabilities.normal) or 1
+        local numer = 1 * prob_mod
+        local numer_display
+        if numer == math.floor(numer) then
+            numer_display = math.floor(numer)
+        else
+            numer_display = string.format("%.2f", numer)
+        end
+
+        return { vars = { numer_display } }
     end,
 
     can_use = function(self, card)
@@ -6436,7 +6544,8 @@ SMODS.Consumable{
 
         local target = G.hand.highlighted[1]
 
-        if pseudorandom(pseudoseed(mod.prefix .. "_shine_chance")) < (1 / 2) then
+        local prob_mod = (G.GAME and G.GAME.probabilities and G.GAME.probabilities.normal) or 1
+        if pseudorandom(pseudoseed(mod.prefix .. "_shine_chance")) < (1 / 2) * prob_mod then
             target:set_edition({ [mod.prefix .. "_brilliant"] = true }, true)
 
             card_eval_status_text(target, "extra", nil, nil, nil, {
@@ -8653,7 +8762,9 @@ SMODS.Consumable{
         if not (G.hand and G.hand.highlighted and G.hand.highlighted[1]) then return end
 
         local target = G.hand.highlighted[1]
+        HEX_SEAL_ALLOW = true
         target:set_seal(mod.prefix .. "_black", true)   -- was just "black"
+        HEX_SEAL_ALLOW = false
 
         card_eval_status_text(target, "extra", nil, nil, nil, {
             message = "Black Seal",
@@ -9092,7 +9203,9 @@ SMODS.Consumable{
         if not (G.hand and G.hand.highlighted and G.hand.highlighted[1]) then return end
 
         local target = G.hand.highlighted[1]
+        HEX_SEAL_ALLOW = true
         target:set_seal(mod.prefix .. "_orange", true)
+        HEX_SEAL_ALLOW = false
 
         card_eval_status_text(target, "extra", nil, nil, nil, {
             message = "Orange Seal",
@@ -9432,7 +9545,9 @@ SMODS.Consumable{
         if not (G.hand and G.hand.highlighted and G.hand.highlighted[1]) then return end
 
         local target = G.hand.highlighted[1]
+        HEX_SEAL_ALLOW = true
         target:set_seal(mod.prefix .. "_green", true)
+        HEX_SEAL_ALLOW = false
 
         card_eval_status_text(target, "extra", nil, nil, nil, {
             message = "Green Seal",
@@ -9902,17 +10017,31 @@ SMODS.Consumable{
     loc_txt = {
         name = "Tadpole Galaxy",
         text = {
-            "{C:green}1 in 5{} chance to create a",
+            "{C:green}#1# in 5{} chance to create a",
             "random {C:purple}Nebula{} card",
         }
     },
+
+    loc_vars = function(self, info_queue, card)
+        local prob_mod = (G.GAME and G.GAME.probabilities and G.GAME.probabilities.normal) or 1
+        local numer = 1 * prob_mod
+        local numer_display
+        if numer == math.floor(numer) then
+            numer_display = math.floor(numer)
+        else
+            numer_display = string.format("%.2f", numer)
+        end
+
+        return { vars = { numer_display } }
+    end,
 
     can_use = function(self, card)
         return true
     end,
 
     use = function(self, card)
-        if pseudorandom(pseudoseed(mod.prefix .. "_tadpole_galaxy")) < (1 / 5) then
+        local prob_mod = (G.GAME and G.GAME.probabilities and G.GAME.probabilities.normal) or 1
+        if pseudorandom(pseudoseed(mod.prefix .. "_tadpole_galaxy")) < (1 / 5) * prob_mod then
             G.E_MANAGER:add_event(Event({
                 trigger = "after",
                 delay = 0.1,
@@ -11079,7 +11208,7 @@ local hex_sacrifice_values = {
 -- Deck's double, then The Monolith's flat bonus -- the exact same order
 -- G.FUNCS.hex_sacrifice and Huge-LQG both go through, since they now
 -- call this same function.
-local function hex_compute_sacrifice_gain(card)
+function hex_compute_sacrifice_gain(card)
     local rarity = card.config.center.rarity
     local gain = hex_sacrifice_values[rarity] or big(0)
 
@@ -14443,19 +14572,22 @@ function Game:start_run(...)
     }))
     return ret
 end
+
 G.FUNCS.hex_sacrifice = function(e)
 
     local card = e.config.ref_table
 
     if not card then return end
-
+    if card.hex_being_hexed then return end -- NEW: already mid-hex, ignore
     if card.ability and card.ability.eternal then return end
     if card.config and card.config.center and card.config.center.key == ("j_" .. mod.prefix .. "_absolute") then return end
 
     local gain = hex_compute_sacrifice_gain(card)
 
-    if gain:gt(big(0)) then -- CHANGED: was gain > big(0)
-        G.GAME.hex_points = (G.GAME.hex_points or big(0)):add(gain) -- CHANGED: was + gain        
+    if gain:gt(big(0)) then
+        card.hex_being_hexed = true -- NEW: stamp immediately, not just at dissolve time
+
+        G.GAME.hex_points = (G.GAME.hex_points or big(0)):add(gain)
         card_eval_status_text(card, "extra", nil, nil, nil, {
             message = "+" .. tostring(gain) .. " Hex",
             colour = G.C.HEX_ORPLE
@@ -15346,9 +15478,60 @@ function add_round_eval_row(config)
         end
 
         local big_bang_count = G.GAME.hex_big_bang_count or 0
+
         if big_bang_count > 0
         and G.GAME.hex_big_bang_paid_round ~= G.GAME.round then
-            -- (keep your existing Big Bang card-creation code here, unchanged)
+
+            G.GAME.hex_big_bang_paid_round = G.GAME.round
+
+            -- Tracks every key already granted by this specific batch of
+            -- Big Bang cards, so (without Showman) the same Star/Galaxy
+            -- card can't be handed out twice in the same round -- reuses
+            -- hex_filter_already_picked, the same picked-table filter
+            -- Star Pack/Galaxy Pack's own create_card already use, which
+            -- itself skips the filter entirely once Showman is owned,
+            -- letting duplicates appear freely.
+            local big_bang_picked = {}
+
+            for i = 1, big_bang_count do
+                G.E_MANAGER:add_event(Event({
+                    trigger = "after",
+                    delay = 0.2 * i,
+                    func = function()
+                        if G.consumeables then
+                            local chosen_key = nil
+
+                            if pseudorandom(pseudoseed(mod.prefix .. "_big_bang_galaxy_" .. i .. "_" .. G.GAME.round)) < 0.1 then
+                                local galaxies = hex_filter_already_picked(hex_get_galaxy_centers(), big_bang_picked)
+                                if #galaxies > 0 then
+                                    chosen_key = galaxies[math.random(#galaxies)].key
+                                end
+                            end
+
+                            if not chosen_key then
+                                local stars = hex_filter_already_picked(hex_get_star_centers(), big_bang_picked)
+                                if #stars > 0 then
+                                    chosen_key = stars[math.random(#stars)].key
+                                end
+                            end
+
+                            if chosen_key then
+                                big_bang_picked[chosen_key] = true
+
+                                local new_card = SMODS.create_card({
+                                    key = chosen_key,
+                                    area = G.consumeables
+                                })
+
+                                new_card:set_edition({ negative = true }, true)
+
+                                G.consumeables:emplace(new_card)
+                            end
+                        end
+                        return true
+                    end
+                }))
+            end
         end
 
         if bonus > 0 then
