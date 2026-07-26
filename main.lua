@@ -3052,28 +3052,32 @@ local HEX_SEAL_POOL_EXCLUDE = {
 }
 
 
+-- Strip any custom seal off a card the instant it's emplaced into an open
+-- Standard/Celestial/Buffoon/Arcana/Spectral Pack's own card area
+-- (G.pack_cards). This is a single guaranteed choke point every pack
+-- card passes through, regardless of whether its seal was set via
+-- Card:set_seal, a raw field assignment, or anything else internal to
+-- how the pack rolled it -- so it doesn't matter how vanilla actually
+-- applied the seal, only that we clean it up right before the player
+-- can see/pick the card.
+local hex_old_cardarea_emplace_seal_strip = CardArea.emplace
 
--- Custom Seals are meant to be grant-only -- never randomly rolled by
--- vanilla pack/shop generation. Excluding them from pseudorandom_element
--- and stripping them post-creation (see the create_card/create_playing_card
--- hooks) both turned out to be too late/unreliable, since vanilla applies
--- a pack card's seal via its own direct Card:set_seal call at a point
--- neither hook can intercept. So instead we block set_seal itself:
--- a custom seal can only actually be applied while HEX_SEAL_ALLOW is
--- true, which our own grant code (Oath/Cappella/Pistol Star/Triangulum
--- Galaxy/etc.) flips on immediately before its own call and off right
--- after. Anything else -- vanilla's random roll, any other mod -- gets
--- silently ignored.
-local HEX_SEAL_ALLOW = false
+function CardArea:emplace(card, ...)
+    if self == G.pack_cards
+    and card
+    and card.seal
+    and HEX_SEAL_POOL_EXCLUDE[card.seal] then
 
-local hex_old_set_seal = Card.set_seal
-
-function Card:set_seal(seal, ...)
-    if seal and HEX_SEAL_POOL_EXCLUDE[seal] and not HEX_SEAL_ALLOW then
-        return
+        if card.set_seal then
+            card:set_seal(nil, true)
+        else
+            card.seal = nil
+        end
     end
-    return hex_old_set_seal(self, seal, ...)
+
+    return hex_old_cardarea_emplace_seal_strip(self, card, ...)
 end
+
 
 
 
@@ -4288,33 +4292,6 @@ end
 
 
 
-
-
--- Standard Packs build their playing cards via create_playing_card, a
--- completely separate function from create_card above (which only
--- covers Jokers/consumables/pack-slot Tarot/Planet/Spectral draws) --
--- Standard Pack's own enhancement/seal/edition rolls happen inside this
--- function, and don't necessarily go through pseudorandom_element in a
--- way the pseudorandom_element hook further up the file can reliably
--- intercept. That's why custom seals were still slipping through there
--- specifically. Same safety-net approach as the create_card hook's own
--- seal strip: let vanilla do whatever it wants, then strip any custom
--- seal off the result if the card was actually going into a pack.
-local old_create_playing_card = create_playing_card
-
-function create_playing_card(config, area, skip_materialize, disable_material, discover)
-    local card = old_create_playing_card(config, area, skip_materialize, disable_material, discover)
-
-    if area == G.pack_cards and card and card.seal and HEX_SEAL_POOL_EXCLUDE[card.seal] then
-        if card.set_seal then
-            card:set_seal(nil, true)
-        else
-            card.seal = nil
-        end
-    end
-
-    return card
-end
 
 
 
@@ -6367,9 +6344,7 @@ SMODS.Consumable{
         if not (G.hand and G.hand.highlighted and G.hand.highlighted[1]) then return end
 
         local target = G.hand.highlighted[1]
-        HEX_SEAL_ALLOW = true
         target:set_seal(mod.prefix .. "_pink", true)
-        HEX_SEAL_ALLOW = false
 
         card_eval_status_text(target, "extra", nil, nil, nil, {
             message = "Pink Seal",
@@ -8762,9 +8737,7 @@ SMODS.Consumable{
         if not (G.hand and G.hand.highlighted and G.hand.highlighted[1]) then return end
 
         local target = G.hand.highlighted[1]
-        HEX_SEAL_ALLOW = true
         target:set_seal(mod.prefix .. "_black", true)   -- was just "black"
-        HEX_SEAL_ALLOW = false
 
         card_eval_status_text(target, "extra", nil, nil, nil, {
             message = "Black Seal",
@@ -9203,9 +9176,7 @@ SMODS.Consumable{
         if not (G.hand and G.hand.highlighted and G.hand.highlighted[1]) then return end
 
         local target = G.hand.highlighted[1]
-        HEX_SEAL_ALLOW = true
         target:set_seal(mod.prefix .. "_orange", true)
-        HEX_SEAL_ALLOW = false
 
         card_eval_status_text(target, "extra", nil, nil, nil, {
             message = "Orange Seal",
@@ -9545,9 +9516,7 @@ SMODS.Consumable{
         if not (G.hand and G.hand.highlighted and G.hand.highlighted[1]) then return end
 
         local target = G.hand.highlighted[1]
-        HEX_SEAL_ALLOW = true
         target:set_seal(mod.prefix .. "_green", true)
-        HEX_SEAL_ALLOW = false
 
         card_eval_status_text(target, "extra", nil, nil, nil, {
             message = "Green Seal",
