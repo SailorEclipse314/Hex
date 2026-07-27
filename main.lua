@@ -2776,7 +2776,7 @@ SMODS.Seal{
     discovered = true,
 
     calculate = function(self, card, context)
-        if context.repetition and context.cardarea == G.play then
+        if context.repetition and (context.cardarea == G.play or context.cardarea == G.hand) then
             return {
                 repetitions = 2,
                 card = card
@@ -2814,7 +2814,7 @@ SMODS.Seal{
     discovered = true,
 
     calculate = function(self, card, context)
-        if context.repetition and context.cardarea == G.play then
+        if context.repetition and (context.cardarea == G.play or context.cardarea == G.hand) then
             return {
                 repetitions = 3,
                 card = card
@@ -2884,7 +2884,7 @@ SMODS.Seal{
     -- it into our odds here is all that's needed for Oops! All 6s to
     -- affect this seal too, without checking for that Joker directly.
     calculate = function(self, card, context)
-        if context.repetition and context.cardarea == G.play then
+        if context.repetition and (context.cardarea == G.play or context.cardarea == G.hand) then
             local chance = (1 / 8) * (G.GAME.probabilities.normal or 1)
             if pseudorandom(pseudoseed(mod.prefix .. "_pink_seal")) < chance then
                 return {
@@ -3018,6 +3018,14 @@ SMODS.Seal{
         end
     end,
 }
+
+
+
+
+
+
+
+
 
 
 
@@ -3424,6 +3432,77 @@ SMODS.Voucher{
         G.GAME.hex_cosmic_rays_unlocked = true
     end,
 }
+
+
+
+
+
+
+-- Gravitational Waves: tier 4 of Nova (requires Cosmic Rays). Unlocks
+-- Galaxy cards appearing directly in the shop's normal consumable slots --
+-- same on/off switch pattern Hypernova uses for Star cards, just gating a
+-- separate flag that the shop-injection hook below reads.
+SMODS.Voucher{
+    key = "gravitational_waves",
+
+    loc_txt = {
+        name = "Gravitational Waves",
+        text = {
+            "{C:galaxy}Galaxy cards{} can now",
+            "appear in the {C:attention}shop{}",
+        }
+    },
+
+    atlas = "HexVouchers",
+    pos = { x = 7, y = 0 }, -- shares its frame with the other (7,0) vouchers in this mod, per existing convention
+
+    requires = { "v_" .. mod.prefix .. "_cosmic_rays" },
+
+    unlocked = true,
+    discovered = true,
+
+    redeem = function(self, card)
+        G.GAME.hex_grav_waves_unlocked = true
+    end,
+}
+
+-- Relativistic Jets: tier 5 of Nova (requires Gravitational Waves).
+-- Permanently boosts the odds of Nebula, Cosmic, and Astral cards
+-- appearing as bonus slots inside Star/Galaxy packs -- multiplies the
+-- existing HEX_NEBULA_IN_GALAXYPACK_CHANCE / HEX_COSMIC_IN_PACK_CHANCE /
+-- HEX_ASTRAL_IN_PACK_CHANCE odds via hex_relativistic_jets_mult() (see
+-- below), read at every one of those roll sites.
+SMODS.Voucher{
+    key = "relativistic_jets",
+
+    loc_txt = {
+        name = "Relativistic Jets",
+        text = {
+            "{C:nebula}Nebula{}, {C:cosmic}Cosmic{}, and",
+            "{C:astral}Astral{} cards are {C:attention}X3{} more",
+            "likely to appear in packs",
+        }
+    },
+
+    atlas = "HexVouchers",
+    pos = { x = 7, y = 0 },
+
+    requires = { "v_" .. mod.prefix .. "_gravitational_waves" },
+
+    unlocked = true,
+    discovered = true,
+
+    redeem = function(self, card)
+        G.GAME.hex_relativistic_jets_unlocked = true
+    end,
+}
+
+
+
+
+
+
+
 
 
 
@@ -4036,6 +4115,17 @@ end
 
 
 
+-- Relativistic Jets: X3 multiplier applied to Nebula/Cosmic/Astral pack
+-- odds wherever they're rolled, once unlocked.
+local function hex_relativistic_jets_mult()
+    return (G.GAME and G.GAME.hex_relativistic_jets_unlocked) and 3 or 1
+end
+
+
+
+
+
+
 -- Applies this edition's own extra_cost onto a card's shop price. The
 -- five custom editions (Prismatic/Chromatic/Brilliant/Radiant/Empowered)
 -- are rolled onto Jokers via card:set_edition *after* old_create_card has
@@ -4159,6 +4249,8 @@ local HEX_STAR_SHOP_CHANCE = 1 / 10
 -- our create_card hook the same way other card creation does, so
 -- hooking CardArea:emplace directly is the reliable point that catches
 -- a Tarot/Planet/Spectral card no matter how it was actually built.
+local HEX_GALAXY_SHOP_CHANCE = 1 / 10 -- same odds Hypernova uses for Star cards
+
 local old_cardarea_emplace_hypernova = CardArea.emplace
 
 function CardArea:emplace(card, ...)
@@ -4175,19 +4267,29 @@ function CardArea:emplace(card, ...)
 
                 if chosen_center then
                     card:set_ability(chosen_center, true)
+                    if card.set_cost then card:set_cost() end
+                end
+            end
 
-                    if card.set_cost then
-                        card:set_cost()
-                    end
+        -- NEW: Gravitational Waves -- same injection, drawing from the
+        -- Galaxy pool instead. `elseif` so a single slot never gets
+        -- double-forced by both rolls.
+        elseif (card.ability.set == "Tarot" or card.ability.set == "Planet" or card.ability.set == "Spectral")
+        and G.GAME and G.GAME.hex_grav_waves_unlocked
+        and pseudorandom(pseudoseed(mod.prefix .. "_grav_waves_shop")) < HEX_GALAXY_SHOP_CHANCE then
+
+            local galaxies = hex_get_galaxy_centers()
+            if #galaxies > 0 then
+                local chosen_key = galaxies[math.random(#galaxies)].key
+                local chosen_center = G.P_CENTERS[chosen_key]
+
+                if chosen_center then
+                    card:set_ability(chosen_center, true)
+                    if card.set_cost then card:set_cost() end
                 end
             end
         end
 
-        -- Negative Deck / Altair / Negative Bunch / Negative Cluster:
-        -- shop-added Jokers don't reliably route through the create_card
-        -- hook the same way other card creation does (same category of
-        -- quirk the Hypernova Star injection above already works around),
-        -- so catch them here too, the reliable way.
         if card.ability.set == "Joker" then
             hex_apply_negative_boosts(card)
         end
@@ -4195,7 +4297,6 @@ function CardArea:emplace(card, ...)
 
     return old_cardarea_emplace_hypernova(self, card, ...)
 end
-
 
 
 
@@ -4566,6 +4667,7 @@ local HEX_RITUAL_SHORT_KEYS = {
     "big_rip",
     "false_vacuum_decay",
     "heat_death",
+    "entropy",
 }
 
 local old_start_run_ritualistic_deck = Game.start_run
@@ -7431,7 +7533,7 @@ SMODS.Booster{
         local chosen_key = nil
 
         if G.GAME and G.GAME.hex_cosmic_unlocked
-        and pseudorandom(pseudoseed(mod.prefix .. "_star_pack_cosmic")) < HEX_COSMIC_IN_PACK_CHANCE then
+        and pseudorandom(pseudoseed(mod.prefix .. "_star_pack_cosmic")) < HEX_COSMIC_IN_PACK_CHANCE * hex_relativistic_jets_mult() then
             local cosmics = hex_filter_already_picked(hex_get_cosmic_centers(), card.hex_star_pack_picked)
             if #cosmics > 0 then
                 chosen_key = cosmics[math.random(#cosmics)].key
@@ -7439,7 +7541,7 @@ SMODS.Booster{
         end
 
         if G.GAME and G.GAME.hex_astral_unlocked
-        and pseudorandom(pseudoseed(mod.prefix .. "_star_pack_astral")) < HEX_ASTRAL_IN_PACK_CHANCE then
+        and pseudorandom(pseudoseed(mod.prefix .. "_star_pack_astral")) < HEX_ASTRAL_IN_PACK_CHANCE * hex_relativistic_jets_mult() then
             local astrals = hex_filter_already_picked(hex_get_astral_centers(), card.hex_star_pack_picked)
             if #astrals > 0 then
                 chosen_key = astrals[math.random(#astrals)].key
@@ -7519,7 +7621,7 @@ SMODS.Booster{
         local chosen_key = nil
 
         if G.GAME and G.GAME.hex_cosmic_unlocked
-        and pseudorandom(pseudoseed(mod.prefix .. "_star_pack_cosmic")) < HEX_COSMIC_IN_PACK_CHANCE then
+        and pseudorandom(pseudoseed(mod.prefix .. "_star_pack_cosmic")) < HEX_COSMIC_IN_PACK_CHANCE * hex_relativistic_jets_mult() then
             local cosmics = hex_filter_already_picked(hex_get_cosmic_centers(), card.hex_star_pack_picked)
             if #cosmics > 0 then
                 chosen_key = cosmics[math.random(#cosmics)].key
@@ -7527,7 +7629,7 @@ SMODS.Booster{
         end
 
         if G.GAME and G.GAME.hex_astral_unlocked
-        and pseudorandom(pseudoseed(mod.prefix .. "_star_pack_astral")) < HEX_ASTRAL_IN_PACK_CHANCE then
+        and pseudorandom(pseudoseed(mod.prefix .. "_star_pack_astral")) < HEX_ASTRAL_IN_PACK_CHANCE * hex_relativistic_jets_mult() then
             local astrals = hex_filter_already_picked(hex_get_astral_centers(), card.hex_star_pack_picked)
             if #astrals > 0 then
                 chosen_key = astrals[math.random(#astrals)].key
@@ -7604,7 +7706,7 @@ SMODS.Booster{
         local chosen_key = nil
 
         if G.GAME and G.GAME.hex_cosmic_unlocked
-        and pseudorandom(pseudoseed(mod.prefix .. "_star_pack_cosmic")) < HEX_COSMIC_IN_PACK_CHANCE then
+        and pseudorandom(pseudoseed(mod.prefix .. "_star_pack_cosmic")) < HEX_COSMIC_IN_PACK_CHANCE * hex_relativistic_jets_mult() then
             local cosmics = hex_filter_already_picked(hex_get_cosmic_centers(), card.hex_star_pack_picked)
             if #cosmics > 0 then
                 chosen_key = cosmics[math.random(#cosmics)].key
@@ -7612,7 +7714,7 @@ SMODS.Booster{
         end
 
         if G.GAME and G.GAME.hex_astral_unlocked
-        and pseudorandom(pseudoseed(mod.prefix .. "_star_pack_astral")) < HEX_ASTRAL_IN_PACK_CHANCE then
+        and pseudorandom(pseudoseed(mod.prefix .. "_star_pack_astral")) < HEX_ASTRAL_IN_PACK_CHANCE * hex_relativistic_jets_mult() then
             local astrals = hex_filter_already_picked(hex_get_astral_centers(), card.hex_star_pack_picked)
             if #astrals > 0 then
                 chosen_key = astrals[math.random(#astrals)].key
@@ -7673,7 +7775,7 @@ local function hex_galaxy_pack_create_card(card, i)
     local chosen_key = nil
 
     if G.GAME and G.GAME.hex_cosmic_unlocked
-    and pseudorandom(pseudoseed(mod.prefix .. "_galaxy_pack_cosmic")) < HEX_COSMIC_IN_PACK_CHANCE then
+    and pseudorandom(pseudoseed(mod.prefix .. "_galaxy_pack_cosmic")) < HEX_COSMIC_IN_PACK_CHANCE * hex_relativistic_jets_mult() then
         local cosmics = hex_filter_already_picked(hex_get_cosmic_centers(), card.hex_galaxy_pack_picked)
         if #cosmics > 0 then
             chosen_key = cosmics[math.random(#cosmics)].key
@@ -7681,7 +7783,7 @@ local function hex_galaxy_pack_create_card(card, i)
     end
 
     if G.GAME and G.GAME.hex_astral_unlocked
-    and pseudorandom(pseudoseed(mod.prefix .. "_galaxy_pack_astral")) < HEX_ASTRAL_IN_PACK_CHANCE then
+    and pseudorandom(pseudoseed(mod.prefix .. "_galaxy_pack_astral")) < HEX_ASTRAL_IN_PACK_CHANCE * hex_relativistic_jets_mult() then
         local astrals = hex_filter_already_picked(hex_get_astral_centers(), card.hex_galaxy_pack_picked)
         if #astrals > 0 then
             chosen_key = astrals[math.random(#astrals)].key
@@ -7689,7 +7791,7 @@ local function hex_galaxy_pack_create_card(card, i)
     end
 
     if not chosen_key
-    and pseudorandom(pseudoseed(mod.prefix .. "_galaxy_pack_nebula")) < HEX_NEBULA_IN_GALAXYPACK_CHANCE then
+    and pseudorandom(pseudoseed(mod.prefix .. "_galaxy_pack_nebula")) < HEX_NEBULA_IN_GALAXYPACK_CHANCE * hex_relativistic_jets_mult() then
         local nebulas = hex_filter_already_picked(hex_get_nebula_centers(), card.hex_galaxy_pack_picked)
         if #nebulas > 0 then
             chosen_key = nebulas[math.random(#nebulas)].key
@@ -14097,6 +14199,217 @@ SMODS.Consumable{
 
 
 
+-- ============================================================
+-- Entropy field matching -- ALLOWLIST approach.
+--
+-- Rather than trying to square every numeric field except a growing list
+-- of exclusions (rates, odds, repetition counts, etc -- which kept
+-- missing new cases), Entropy now only ever touches fields whose name
+-- matches a known SCORING stat (Chips/Mult/Xmult/exponent/power-style
+-- fields) or a known MONEY-bonus stat (dollars/money/cash). Everything
+-- else on a Joker's `ability` table -- growth rates, odds, repetition
+-- counts, internal flags, anything from any other mod -- is left
+-- completely untouched, by default, with no exclusion list needed.
+-- ============================================================
+
+-- Field name patterns recognized as an actual scoring stat (a current
+-- value that contributes Chips/Mult/Xmult to a hand), matched against
+-- the lowercased field name. Deliberately narrow and literal rather than
+-- broad substring matches, so things like "Xmult_gain" (a growth RATE,
+-- not the stat itself) are excluded by not matching "^xmult$"/"xmult$"
+-- exactly at the end of the name.
+HEX_ENTROPY_SCORE_PATTERNS = {
+    "^chips$",
+    "^mult$",
+    "^x_chips$",
+    "^x_mult$",
+    "xmult$",       -- catches Xmult, xmult, custom_xmult, etc.
+    "^exponent$",
+    "exponent$",     -- catches this mod's own `extra.exponent` fields
+    "^power$",
+    "power$",        -- catches Ruby/Sapphire/Topaz-style `extra.power`
+
+    -- Power/tetration/pentation notation fields, as used throughout this
+    -- mod's calculate() return tables and Card:calculate_joker (Ruby,
+    -- Sapphire, Platinum, Diamond, editions like Radiant/Empowered, etc):
+    --   e_*   = raise to the power (arrow(1, n))
+    --   ee_*  = tetrate            (arrow(2, n))
+    --   eee_* = pentate            (arrow(3, n))
+    "^e_mult$",
+    "^e_chips$",
+    "^ee_mult$",
+    "^ee_chips$",
+    "^eee_mult$",
+    "^eee_chips$",
+}
+
+-- Field name patterns recognized as a money/dollar bonus stat.
+HEX_ENTROPY_MONEY_PATTERNS = {
+    "^dollars$",
+    "dollars$",
+    "^money$",
+    "money$",
+    "^cash$",
+    "cash$",
+}
+
+-- Field name patterns that are NEVER squared even if they happen to
+-- match one of the above (e.g. "Xmult_gain" contains "xmult" but is a
+-- growth rate, not the stat itself; "dollar_repetitions" would contain
+-- "dollars" but is a count). Checked first and always wins.
+HEX_ENTROPY_NEVER_PATTERNS = {
+    "_gain$",
+    "_rate$",
+    "_step$",
+    "_increment$",
+    "repetition",
+    "retrigger",
+    "^reps$",
+    "reps$",
+    "odds",
+    "chance",
+    "prob",
+    "denom",
+    "numerator",
+}
+
+function hex_entropy_matches_any(name, patterns)
+    if type(name) ~= "string" then return false end
+    local lname = name:lower()
+    for _, pattern in ipairs(patterns) do
+        if lname:find(pattern) then
+            return true
+        end
+    end
+    return false
+end
+
+-- The single source of truth for "should Entropy touch this field at
+-- all". Only true for fields matching a known scoring or money pattern,
+-- AND not matching a never-touch pattern.
+function hex_entropy_should_square_field(name)
+    if hex_entropy_matches_any(name, HEX_ENTROPY_NEVER_PATTERNS) then
+        return false
+    end
+    return hex_entropy_matches_any(name, HEX_ENTROPY_SCORE_PATTERNS)
+        or hex_entropy_matches_any(name, HEX_ENTROPY_MONEY_PATTERNS)
+end
+
+-- Recursively walks `t`, squaring only fields whose name passes
+-- hex_entropy_should_square_field, and descending one extra level into
+-- any plain sub-table (this is what reaches into `ability.extra`, where
+-- most custom Jokers -- including several in this mod -- actually keep
+-- their Xmult/exponent/power fields). `depth` guards against descending
+-- forever in case of any unexpected nested structure.
+function hex_entropy_square_table(t, depth)
+    if type(t) ~= "table" or depth > 2 then return end
+
+    for k, v in pairs(t) do
+        if hex_entropy_should_square_field(k) then
+            local scalable = false
+
+            if type(v) == "number" then
+                scalable = true
+            elseif type(v) == "table" or type(v) == "cdata" then
+                local ok, has_mul = pcall(function() return v.mul ~= nil end)
+                scalable = ok and has_mul or false
+            end
+
+            if scalable then
+                t[k] = to_big(v):mul(to_big(v))
+            end
+        elseif type(v) == "table" then
+            -- Not a scoring/money field itself, but still descend into
+            -- it (e.g. `extra`) in case IT contains a scoring/money field
+            -- one level down.
+            hex_entropy_square_table(v, depth + 1)
+        end
+    end
+end
+
+function hex_entropy_apply_to_card(card)
+    if not (card and card.config and card.config.center) then return false end
+    if card.config.center.rarity == R_HEX_DIVINE.key then return false end
+    if not card.ability then return false end
+
+    hex_entropy_square_table(card.ability, 1)
+    return true
+end
+
+
+
+
+
+
+
+SMODS.Consumable{
+    key = "entropy",
+    set = "ritual",
+
+    atlas = "HexRitualsQuantums",
+    pos = { x = 1, y = 1 }, -- next open frame in the atlas, after Heat Death (0,1)
+
+    unlocked = true,
+    discovered = true,
+
+    in_pool = function(self)
+        return false             -- never naturally generated; must be granted directly
+    end,
+
+    loc_txt = {
+        name = "Entropy",
+        text = {
+            "Permanently {C:attention}squares{} the",
+            "{C:chips}Chips{}, {C:mult}Mult{}, {C:attention}Xmult{},",
+            "and every other Joker stat",
+            "of {C:attention}every owned{} Joker",
+            "{C:inactive}(Does not affect {C:divine}Divine{}{C:inactive} Jokers or above){}",
+        }
+    },
+
+    can_use = function(self, card)
+        return true
+    end,
+
+    use = function(self, card)
+        if not (G.jokers and G.jokers.cards) then return end
+
+        local affected = 0
+
+        for _, j in ipairs(G.jokers.cards) do
+            if hex_entropy_apply_to_card(j) then
+                affected = affected + 1
+                if j.juice_up then j:juice_up() end
+            end
+        end
+
+        G.GAME.hex_rituals_used = G.GAME.hex_rituals_used or {}
+        G.GAME.hex_rituals_used["entropy"] = true
+
+        card_eval_status_text(card, "extra", nil, nil, nil, {
+            message = affected > 0 and "Entropy!" or "No Effect",
+            colour = G.C.RITUAL
+        })
+    end,
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -14521,6 +14834,8 @@ function Game:start_run(...)
     G.GAME.hex_magic_studies_bonus = G.GAME.hex_magic_studies_bonus or 0
     G.GAME.hex_false_vacuum_uses = G.GAME.hex_false_vacuum_uses or 0
     G.GAME.hex_heat_death_uses = G.GAME.hex_heat_death_uses or 0
+    G.GAME.hex_grav_waves_unlocked = G.GAME.hex_grav_waves_unlocked or false
+    G.GAME.hex_relativistic_jets_unlocked = G.GAME.hex_relativistic_jets_unlocked or false
 
     -- Re-apply the hyperoperator scoring calculation on resume/load, since
     -- G.GAME.current_scoring_calculation_key isn't guaranteed to survive it.
@@ -14698,6 +15013,7 @@ G.FUNCS.create_ritual = function()
         "big_rip",
         "false_vacuum_decay",
         "heat_death",
+        "entropy",
     }
 
     local rituals = {}
@@ -15435,15 +15751,22 @@ G.FUNCS.evaluate_round = function()
         if ret then
             add_round_eval_row({dollars = ret, bonus = true, name='joker'..i, pitch = pitch, card = G.jokers.cards[i]})
             pitch = pitch + 0.06
-            dollars = dollars:add(big(ret.dollars))
+            dollars = dollars:add(big(type(ret) == "number" and ret or ret.dollars or 0))
         end
     end
     for i = 1, #G.GAME.tags do
         local ret = G.GAME.tags[i]:apply_to_run({type = 'eval'})
         if ret then
+            -- Some tags' apply_to_run return a plain number (just a dollar
+            -- amount) instead of a table with .dollars/.condition/.pos/.tag --
+            -- normalize here so indexing below never crashes.
+            if type(ret) == "number" then
+                ret = { dollars = ret }
+            end
+
             add_round_eval_row({dollars = ret.dollars, bonus = true, name='tag'..i, pitch = pitch, condition = ret.condition, pos = ret.pos, tag = ret.tag})
             pitch = pitch + 0.06
-            dollars = dollars + big(ret.dollars) -- CHANGED
+            dollars = dollars + big(ret.dollars or 0)
         end
     end
     if G.GAME.dollars:gte(big(5)) and not G.GAME.modifiers.no_interest then -- CHANGED: big(5), relies on OmegaNum's own >= metamethod
