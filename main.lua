@@ -4118,7 +4118,7 @@ end
 -- Relativistic Jets: X3 multiplier applied to Nebula/Cosmic/Astral pack
 -- odds wherever they're rolled, once unlocked.
 local function hex_relativistic_jets_mult()
-    return (G.GAME and G.GAME.hex_relativistic_jets_unlocked) and 3 or 1
+    return (G.GAME and G.GAME.hex_relativistic_jets_unlocked) and 5 or 1
 end
 
 
@@ -15847,7 +15847,7 @@ function add_round_eval_row(config)
             for i = 1, big_bang_count do
                 G.E_MANAGER:add_event(Event({
                     trigger = "after",
-                    delay = 0.2 * i,
+                    delay = 0.01,
                     func = function()
                         if G.consumeables then
                             local chosen_key = nil
