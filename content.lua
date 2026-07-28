@@ -3415,10 +3415,10 @@ function Game:start_run(args, ...)
 end
 
 SMODS.Back{
-    key = "holy_deck",
+    key = "ascended_deck",
 
     loc_txt = {
-        name = "Holy Deck",
+        name = "Ascended Deck",
         text = {
             "Start with a random",
             "{C:divine}Divine{} Joker",
@@ -3441,29 +3441,29 @@ SMODS.Back{
     atlas = "HexEnhancers",
 }
 
--- Key of Holy Deck, used the same way HEX_PRESTIGE_DECK_KEY is used
+-- Key of ascended Deck, used the same way HEX_PRESTIGE_DECK_KEY is used
 -- above, to check which deck is currently selected.
-local HEX_HOLY_DECK_KEY = "b_" .. mod.prefix .. "_holy_deck"
+local HEX_ASCENDED_DECK_KEY = "b_" .. mod.prefix .. "_ascended_deck"
 
-local function hex_holy_deck_selected()
+local function hex_ascended_deck_selected()
     return G.GAME
         and G.GAME.selected_back
         and G.GAME.selected_back.effect
         and G.GAME.selected_back.effect.center
-        and G.GAME.selected_back.effect.center.key == HEX_HOLY_DECK_KEY
+        and G.GAME.selected_back.effect.center.key == HEX_ASCENDED_DECK_KEY
 end
 
--- Holy Deck: grants one random Divine Joker (same pool-scan approach
+-- ASCENDED Deck: grants one random Divine Joker (same pool-scan approach
 -- Prestige/Infernal Deck's grants above use) and raises win_ante to 32.
 -- Same new-run-only guard as the decks above. Inaccessible is excluded
 -- from the pool, the same way G.FUNCS.summon_divine excludes it -- it
 -- must be earned normally, never handed out as a starting Joker.
-local old_start_run_holy_deck = Game.start_run
+local old_start_run_ascended_deck = Game.start_run
 
 function Game:start_run(args, ...)
-    local ret = old_start_run_holy_deck(self, args, ...)
+    local ret = old_start_run_ascended_deck(self, args, ...)
 
-    if hex_holy_deck_selected() and not (args and args.savetext) then
+    if hex_ascended_deck_selected() and not (args and args.savetext) then
         G.GAME.win_ante = 32
 
         local divines = {}
@@ -3498,7 +3498,6 @@ SMODS.Back{
     loc_txt = {
         name = "Hard Deck",
         text = {
-            "Win ante is ante 16",
             "{C:mult}-1{} Joker slot",
             "{C:mult}-1{} hand each round",
             "{C:mult}-1{} discard each round",
@@ -3562,7 +3561,6 @@ function Game:start_run(args, ...)
     local ret = old_start_run_hard_deck(self, args, ...)
 
     if hex_hard_deck_selected() and not (args and args.savetext) then
-        G.GAME.win_ante = 16
 
         G.GAME.round_resets.hands = math.max(1, (G.GAME.round_resets.hands or 4) - 1)
         G.GAME.round_resets.discards = math.max(0, (G.GAME.round_resets.discards or 3) - 1)
@@ -3605,17 +3603,16 @@ SMODS.Back{
     loc_txt = {
         name = "Impossible Deck",
         text = {
-            "Win ante is ante 1",
-            "{C:mult}-4{} Joker slot",
-            "{C:mult}-3{} hand each round",
-            "{C:mult}-3{} discard each round",
+            "{C:mult}-3{} Joker slot",
+            "{C:mult}-2{} hand each round",
+            "{C:mult}-2{} discard each round",
             "{C:attention}-3{} hand size",
             "Start with {C:money}$0{}",
         }
     },
 
     config = {
-        joker_slot = -4
+        joker_slot = -3
     },
 
     unlocked = true,
@@ -3645,8 +3642,8 @@ function Game:start_run(args, ...)
     if hex_impossible_deck_selected() and not (args and args.savetext) then
         G.GAME.win_ante = 1
 
-        G.GAME.round_resets.hands = math.max(1, (G.GAME.round_resets.hands or 4) - 3)
-        G.GAME.round_resets.discards = math.max(0, (G.GAME.round_resets.discards or 3) - 3)
+        G.GAME.round_resets.hands = math.max(1, (G.GAME.round_resets.hands or 4) - 2)
+        G.GAME.round_resets.discards = math.max(0, (G.GAME.round_resets.discards or 3) - 2)
         G.GAME.round_resets.hand_size = math.max(1, (G.GAME.round_resets.hand_size or 8) - 3)
 
         if G.GAME.current_round then
