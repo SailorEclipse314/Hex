@@ -2083,7 +2083,7 @@ SMODS.Consumable{
 
             card_eval_status_text(target, "extra", nil, nil, nil, {
                 message = "+" .. tostring(gain) .. " Hex",
-                colour = G.C.RITUAL
+                colour = G.C.SECONDARY_SET.Spectral
             })
 
             G.E_MANAGER:add_event(Event({

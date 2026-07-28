@@ -23,6 +23,785 @@
 
 local mod = SMODS.current_mod
 
+
+
+
+
+
+-- Dragon Fruit: gives $6 every hand played, decaying by $1 after each
+-- hand (applied on context.after, which fires once per hand AFTER
+-- joker_main -- so the hand that just resolved still got the un-decayed
+-- amount, and only the *next* hand sees the lower value). Self-destructs
+-- once the gain hits 0. Guarded with `not context.blueprint` on the
+-- decrement/destroy so a Blueprint copy doesn't double-decay or
+-- prematurely destroy the original card.
+SMODS.Joker{
+    key = "dragon_fruit",
+
+    loc_txt = {
+        name = "Dragon Fruit",
+        text = {
+            "Gives {C:money}+$#1#{} every time",
+            "a hand is played, the gain",
+            "goes down by {C:money}$1{} after",
+            "each hand is played",
+            "{C:inactive}(Destroyed at {}{C:money}+$0{}{C:inactive}){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 0, y = 1 },
+
+    rarity = 1,
+    cost = 4,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            dollars = 6,
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.dollars } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main and card.ability.extra.dollars > 0 then
+            return {
+                dollars = card.ability.extra.dollars,
+                colour = G.C.MONEY,
+            }
+        end
+
+        if context.after and not context.blueprint then
+            card.ability.extra.dollars = math.max(0, card.ability.extra.dollars - 1)
+
+            if card.ability.extra.dollars <= 0 then
+                G.E_MANAGER:add_event(Event({
+                    trigger = "after",
+                    delay = 0.3,
+                    func = function()
+                        card:start_dissolve()
+                        return true
+                    end
+                }))
+            end
+        end
+    end,
+}
+
+-- Snowball: +3 Mult, growing by +3 more at the end of every round.
+-- Dedupe against G.GAME.round with a per-card stamp, same technique
+-- Overflow/Black Seal use elsewhere in this file for context.end_of_round
+-- firing multiple times per card in this Steamodded build.
+SMODS.Joker{
+    key = "snowball",
+
+    loc_txt = {
+        name = "Snowball",
+        text = {
+            "Gives {C:mult}+#1#{} Mult,",
+            "gained Mult increases by",
+            "{C:mult}+3{} at the end of round",
+            "{C:inactive}(Currently {}{C:mult}+#1#{}{C:inactive} Mult){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 0, y = 1 },
+
+    rarity = 1,
+    cost = 4,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            mult = 0,
+            mult_gain = 3,
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.mult } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            return {
+                mult = card.ability.extra.mult,
+            }
+        end
+
+        if context.end_of_round
+        and not context.blueprint
+        and card.hex_snowball_last_round ~= G.GAME.round then
+
+            card.hex_snowball_last_round = G.GAME.round
+            card.ability.extra.mult = card.ability.extra.mult + card.ability.extra.mult_gain
+
+            return {
+                message = localize("k_upgrade_ex"),
+                colour = G.C.MULT,
+            }
+        end
+    end,
+}
+
+-- Queer Joker: +69 Chips if the played hand is not a Straight.
+SMODS.Joker{
+    key = "queer_joker",
+
+    loc_txt = {
+        name = "Queer Joker",
+        text = {
+            "Gives {C:chips}+69{} Chips if",
+            "played hand does not",
+            "contain a {C:attention}Straight{}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 0, y = 1 },
+
+    rarity = 1,
+    cost = 4,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    calculate = function(self, card, context)
+        if context.joker_main and not next(context.poker_hands["Straight"]) then
+            return {
+                chips = 69,
+                colour = G.C.CHIPS,
+            }
+        end
+    end,
+}
+
+-- Casual Joker: +10 Mult if the played hand is not a Pair.
+SMODS.Joker{
+    key = "casual_joker",
+
+    loc_txt = {
+        name = "Casual Joker",
+        text = {
+            "Gives {C:mult}+10{} Mult if",
+            "played hand does not",
+            "contain a {C:attention}Pair{}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 0, y = 1 },
+
+    rarity = 1,
+    cost = 4,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    calculate = function(self, card, context)
+        if context.joker_main and not next(context.poker_hands["Pair"]) then
+            return {
+                mult = 10,
+                colour = G.C.MULT,
+            }
+        end
+    end,
+}
+
+-- Jester: flat +10 Mult, -30 Chips, every hand.
+SMODS.Joker{
+    key = "jester",
+
+    loc_txt = {
+        name = "Jester",
+        text = {
+            "Gives {C:mult}+10{} Mult",
+            "but {C:chips}-30{} Chips",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 0, y = 1 },
+
+    rarity = 1,
+    cost = 1,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            return {
+                mult = 10,
+                chips = -30,
+                colour = G.C.MULT,
+            }
+        end
+    end,
+}
+
+-- Totem: +10 Hex points at the end of a Boss Blind. Same
+-- end_of_round + G.GAME.blind.boss + per-card round-stamp dedupe that
+-- Overflow uses elsewhere in this file.
+SMODS.Joker{
+    key = "totem",
+
+    loc_txt = {
+        name = "Totem",
+        text = {
+            "Gives {C:purple}+10{} Hex points",
+            "at the end of a {C:attention}Boss Blind{}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 0, y = 1 },
+
+    rarity = 1,
+    cost = 4,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            last_round = nil,
+        }
+    },
+
+    calculate = function(self, card, context)
+        if context.end_of_round
+        and G.GAME.blind
+        and G.GAME.blind.boss
+        and not context.blueprint
+        and card.ability.extra.last_round ~= G.GAME.round then
+
+            card.ability.extra.last_round = G.GAME.round
+
+            G.GAME.hex_points = (G.GAME.hex_points or big(0)):add(big(10))
+
+            return {
+                message = "+10 Hex",
+                colour = G.C.HEX_ORPLE or G.C.PURPLE,
+            }
+        end
+    end,
+}
+
+-- Roadrunner: +$10 when skipping a Blind (context.skip_blind is the
+-- same flag vanilla Red Card uses for its own "blind skipped" trigger).
+SMODS.Joker{
+    key = "roadrunner",
+
+    loc_txt = {
+        name = "Roadrunner",
+        text = {
+            "Gives {C:money}+$10{} when",
+            "{C:attention}skipping{} a Blind",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 0, y = 1 },
+    rarity = 1,
+    cost = 4,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    calculate = function(self, card, context)
+        if context.skip_blind and not context.blueprint then
+            return {
+                dollars = 10,
+                colour = G.C.MONEY,
+            }
+        end
+    end,
+}
+
+-- Hoarder: +60 Chips for every consumable slot currently occupied
+-- (i.e. #G.consumeables.cards, not the total slot count).
+SMODS.Joker{
+    key = "hoarder",
+
+    loc_txt = {
+        name = "Hoarder",
+        text = {
+            "Gives {C:chips}+60{} Chips for every",
+            "{C:attention}Consumable{} slot in use",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 0, y = 1 },
+
+    rarity = 1,
+    cost = 4,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            local used = (G.consumeables and #G.consumeables.cards) or 0
+
+            if used > 0 then
+                return {
+                    chips = used * 60,
+                    colour = G.C.CHIPS,
+                }
+            end
+        end
+    end,
+}
+
+-- Soul Candle: +10 Chips for every Hex point currently owned. Hex
+-- points are an OmegaNum (big()) value in this mod, so the multiply
+-- goes through the big-number API rather than plain Lua arithmetic.
+SMODS.Joker{
+    key = "soul_candle",
+
+    loc_txt = {
+        name = "Soul Candle",
+        text = {
+            "Gives {C:chips}+10{} Chips for",
+            "every {C:purple}Hex point{} owned",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 0, y = 1 },
+
+    rarity = 1,
+    cost = 4,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            local hex_points = G.GAME.hex_points or big(0)
+
+            if hex_points:gt(big(0)) then
+                return {
+                    chips = hex_points:mul(big(10)),
+                    colour = G.C.CHIPS,
+                }
+            end
+        end
+    end,
+}
+
+-- Scientist: +35 Chips at the end of round if no Tarot card was used
+-- that round; using a Tarot resets the stored gain to 0 immediately.
+-- Tarot usage is detected by wrapping Card:use_consumeable (the base
+-- game's own "use this consumable" method) rather than a calculate
+-- context flag, since there isn't a built-in context hook for
+-- consumable use -- same monkey-patch approach this file already uses
+-- for Card.start_dissolve above. Test this against your installed
+-- build the way this file's other comments flag build-specific quirks;
+-- if Card:use_consumeable doesn't fire the way expected, that's the
+-- spot to adjust.
+SMODS.Joker{
+    key = "scientist",
+
+    loc_txt = {
+        name = "Scientist",
+        text = {
+            "Gains {C:chips}+35{} Chips at the",
+            "end of round if you haven't",
+            "used a {C:tarot}Tarot{} card that round",
+            "{C:inactive}(Resets to {}{C:chips}+0{}{C:inactive} if you{}",
+            "{C:inactive}use a {}{C:tarot}Tarot{}{C:inactive} card){}",
+            "{C:inactive}(Currently {}{C:chips}+#1#{}{C:inactive} Chips){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 0, y = 1 },
+
+    rarity = 1,
+    cost = 4,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            chips = 0,
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.chips } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            return {
+                chips = card.ability.extra.chips,
+            }
+        end
+
+        if context.end_of_round
+        and not context.blueprint
+        and card.hex_scientist_last_round ~= G.GAME.round then
+
+            card.hex_scientist_last_round = G.GAME.round
+
+            if not G.GAME.hex_scientist_tarot_used_this_round then
+                card.ability.extra.chips = card.ability.extra.chips + 35
+
+                return {
+                    message = localize("k_upgrade_ex"),
+                    colour = G.C.CHIPS,
+                }
+            end
+
+            -- reset the flag for next round regardless of which branch fired
+            G.GAME.hex_scientist_tarot_used_this_round = false
+        end
+    end,
+}
+
+-- Hook for Scientist above: fires whenever ANY Tarot card is used
+-- (built-in or custom), zeroing out every Scientist's stored gain
+-- immediately and flagging the round so its end-of-round check above
+-- skips the +35 gain this round too.
+local hex_old_use_consumeable = Card.use_consumeable
+
+function Card:use_consumeable(area, copier)
+    if self.ability and self.ability.set == "Tarot" and not copier then
+        G.GAME.hex_scientist_tarot_used_this_round = true
+
+        if G.jokers and G.jokers.cards then
+            for _, j in ipairs(G.jokers.cards) do
+                if j.config and j.config.center
+                and j.config.center.key == ("j_" .. mod.prefix .. "_scientist") then
+                    j.ability.extra.chips = 0
+                end
+            end
+        end
+    end
+
+    return hex_old_use_consumeable(self, area, copier)
+end
+
+-- Snapshot of the discard button press itself: how many cards were
+-- selected, and a unique id for the action. Bartender checks these
+-- instead of context.full_hand's size, since that field wasn't
+-- reliably reflecting the whole discard batch per calculate call in
+-- this installed build (it was firing once per discarded card instead
+-- of once per discard action). Same "hook the real G.FUNCS handler"
+-- approach the can_play/can_discard overrides above already use.
+local hex_old_discard_from_highlighted = G.FUNCS.discard_cards_from_highlighted
+
+G.FUNCS.discard_cards_from_highlighted = function(e)
+    G.GAME.hex_last_discard_count = (G.hand and G.hand.highlighted and #G.hand.highlighted) or 0
+    G.GAME.hex_discard_action_id = (G.GAME.hex_discard_action_id or 0) + 1
+
+    return hex_old_discard_from_highlighted(e)
+end
+
+-- Bartender: $3 when you discard exactly one card. Fires at most once
+-- per discard action (dedupe via hex_discard_action_id, stamped per
+-- card so multiple Bartenders each still fire once), gated on the
+-- pre-discard highlighted count captured above rather than
+-- context.full_hand.
+SMODS.Joker{
+    key = "bartender",
+
+    loc_txt = {
+        name = "Bartender",
+        text = {
+            "Gives {C:money}$3{} when you",
+            "discard {C:attention}exactly one{} card",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 0, y = 1 },
+
+    rarity = 1,
+    cost = 3,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            last_discard_id = 0,
+        }
+    },
+
+    calculate = function(self, card, context)
+        if context.discard
+        and not context.blueprint
+        and (G.GAME.hex_last_discard_count or 0) == 1
+        and card.ability.extra.last_discard_id ~= G.GAME.hex_discard_action_id then
+
+            card.ability.extra.last_discard_id = G.GAME.hex_discard_action_id
+
+            return {
+                dollars = 3,
+                colour = G.C.MONEY,
+            }
+        end
+    end,
+}
+
+-- Encore: retriggers Bonus and Mult enhancement cards once more.
+-- Standard vanilla retrigger-joker shape (context.repetition +
+-- context.cardarea == G.play, returning repetitions alongside the
+-- specific context.other_card), same pattern Orange/Green Seal use
+-- above in content.lua, just gated on the card's enhancement key
+-- instead of applying to every card unconditionally.
+SMODS.Joker{
+    key = "encore",
+
+    loc_txt = {
+        name = "Encore",
+        text = {
+            "{C:attention}Bonus{} and {C:attention}Mult{} cards",
+            "retrigger {C:attention}once{} more",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 0, y = 1 },
+
+    rarity = 1,
+    cost = 4,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    calculate = function(self, card, context)
+        if context.repetition and context.cardarea == G.play and not context.blueprint then
+            local key = context.other_card.config and context.other_card.config.center
+                and context.other_card.config.center.key
+
+            if key == "m_bonus" or key == "m_mult" then
+                return {
+                    repetitions = 1,
+                    card = context.other_card,
+                }
+            end
+        end
+    end,
+}
+
+-- File-scope, unsaved table tracking which cards scored this hand, keyed
+-- per Dead Weight card. Deliberately kept OUTSIDE card.ability/
+-- card.config (which the save serializer walks) -- the previous version
+-- stored this inside card.ability.extra with live Card objects as table
+-- keys, which put real Card references into the save graph and produced
+-- genuine cycles (Card -> area -> cards list -> same Card), crashing on
+-- save with "Cycle detected in table". A plain local here is never
+-- reached by the save code, so it's safe to hold live Card references.
+local hex_dead_weight_scored = {}
+
+SMODS.Joker{
+    key = "dead_weight",
+
+    loc_txt = {
+        name = "Dead Weight",
+        text = {
+            "Gives {C:mult}+6{} Mult for every",
+            "{C:attention}unscored{} card in play",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 0, y = 1 },
+
+    rarity = 1,
+    cost = 4,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            mult_per_card = 6,
+        }
+    },
+
+    calculate = function(self, card, context)
+        if context.before then
+            hex_dead_weight_scored[card] = {}
+        end
+
+        if context.individual and context.cardarea == G.play and not context.blueprint then
+            hex_dead_weight_scored[card] = hex_dead_weight_scored[card] or {}
+            hex_dead_weight_scored[card][context.other_card] = true
+        end
+
+        if context.joker_main then
+            local scored = hex_dead_weight_scored[card] or {}
+            local unscored = 0
+
+            for _, c in ipairs(G.play.cards) do
+                if not scored[c] then
+                    unscored = unscored + 1
+                end
+            end
+
+            if unscored > 0 then
+                return {
+                    mult = unscored * card.ability.extra.mult_per_card,
+                    colour = G.C.MULT,
+                }
+            end
+        end
+    end,
+
+    -- Cleans up this card's entry in the tracking table when it leaves
+    -- play (sold/destroyed), so stale entries don't just accumulate for
+    -- the rest of the run.
+    remove_from_deck = function(self, card, from_debuff)
+        hex_dead_weight_scored[card] = nil
+    end,
+}
+
+-- Streak: +7 Mult permanently for every Blind won in exactly one hand;
+-- resets to 0 the moment a Blind takes more than one hand to win.
+-- Hands played this round are counted at context.joker_main (fires
+-- once per hand played), checked/reset at context.end_of_round (once
+-- per round, deduped with the same per-card round-stamp technique used
+-- by Overflow/Snowball/Totem/Scientist above).
+SMODS.Joker{
+    key = "streak",
+
+    loc_txt = {
+        name = "Streak",
+        text = {
+            "Gains {C:mult}+7{} Mult for every",
+            "Blind won in {C:attention}one hand{},",
+            "resets if it isn't",
+            "{C:inactive}(Currently {}{C:mult}+#1#{}{C:inactive} Mult){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 0, y = 1 },
+
+    rarity = 1,
+    cost = 5,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            mult = 0,
+            hands_this_round = 0,
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.mult } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            card.ability.extra.hands_this_round = (card.ability.extra.hands_this_round or 0) + 1
+
+            return {
+                mult = card.ability.extra.mult,
+            }
+        end
+
+        if context.end_of_round
+        and not context.blueprint
+        and card.hex_streak_last_round ~= G.GAME.round then
+
+            card.hex_streak_last_round = G.GAME.round
+
+            if (card.ability.extra.hands_this_round or 0) == 1 then
+                card.ability.extra.mult = card.ability.extra.mult + 7
+            else
+                card.ability.extra.mult = 0
+            end
+
+            card.ability.extra.hands_this_round = 0
+
+            return {
+                message = localize("k_upgrade_ex"),
+                colour = G.C.MULT,
+            }
+        end
+    end,
+}
+
+SMODS.Joker{
+    key = "leftovers",
+
+    loc_txt = {
+        name = "Leftovers",
+        text = {
+            "Cards {C:attention}held in hand{}",
+            "give {C:chips}+10{} Chips",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 0, y = 1 },
+
+    rarity = 1,
+    cost = 4,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    calculate = function(self, card, context)
+        -- context.individual + cardarea == G.hand fires twice: once
+        -- during the normal held-card scoring pass (what we want), and
+        -- again during the End of Round held-card re-evaluation (same
+        -- Card Evaluation steps, reused) -- excluding
+        -- context.end_of_round is what keeps this to the one, correctly
+        -- timed trigger per hand played.
+        if context.individual
+        and context.cardarea == G.hand
+        and not context.end_of_round
+        and not context.blueprint then
+
+            return {
+                chips = 10,
+                card = context.other_card,
+                colour = G.C.CHIPS,
+            }
+        end
+    end,
+}
+
+
+
+
+
 SMODS.Joker{
     key = "musa_acuminata",
 
