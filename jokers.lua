@@ -439,10 +439,10 @@ SMODS.Joker{
     loc_txt = {
         name = "Green Screen",
         text = {
-            "This Joker gains {X:mult,C:white}X1{} Mult",
+            "This Joker gains {X:mult,C:white}X#1#{} Mult",
             "every time a",
             "{C:attention}Full House{} is played",
-            "{C:inactive}(Currently {}{X:mult,C:white}X#1#{}{C:inactive} Mult){}"
+            "{C:inactive}(Currently {}{X:mult,C:white}X#2#{}{C:inactive} Mult){}"
         }
     },
     config = { extra = { Xmult = big(1), Xmult_gain = big(1) } },
@@ -475,7 +475,7 @@ SMODS.Joker{
 
     -- Fills the #1# placeholder in the description text with the current Xmult
     loc_vars = function(self, info_queue, card)
-        return { vars = { card.ability.extra.Xmult } }
+        return { vars = {card.ability.extra.Xmult_gain, card.ability.extra.Xmult } }
     end,
 }
 
