@@ -3942,8 +3942,19 @@ local HEX_STAR_PACK_CHANCE = 1 / 33
 
 local HEX_STAR_PACK_CHANCE = 1 / 33
 
+-- Showman's center key is "j_ring_master" -- "Showman" is only its display
+-- name, there is no "j_showman" center, so looking up that key silently
+-- returned false forever. Prefer SMODS.showman() when it's available: it
+-- checks the same key and additionally honours SMODS' own
+-- allow_duplicates flags and any modded Showman equivalents.
 local function hex_owns_showman()
-    return SMODS.find_card and #SMODS.find_card("j_showman") > 0
+    if SMODS and SMODS.showman then
+        return SMODS.showman() and true or false
+    end
+    if SMODS and SMODS.find_card then
+        return #SMODS.find_card("j_ring_master") > 0
+    end
+    return find_joker and next(find_joker("Showman")) and true or false
 end
 
 -- Checks whether a Star (or any) consumable with this exact key is
@@ -4115,7 +4126,7 @@ end
 
 
 
--- Relativistic Jets: X3 multiplier applied to Nebula/Cosmic/Astral pack
+-- Relativistic Jets: X5 multiplier applied to Nebula/Cosmic/Astral pack
 -- odds wherever they're rolled, once unlocked.
 local function hex_relativistic_jets_mult()
     return (G.GAME and G.GAME.hex_relativistic_jets_unlocked) and 5 or 1
@@ -4668,6 +4679,7 @@ local HEX_RITUAL_SHORT_KEYS = {
     "false_vacuum_decay",
     "heat_death",
     "entropy",
+    "singularity",
 }
 
 local old_start_run_ritualistic_deck = Game.start_run
@@ -5468,52 +5480,123 @@ function Card:calculate_joker(context)
 end
 
 
--- Perkeo: fires when actually leaving the shop via the "Next Round"
--- button. That button's config is `button = 'toggle_shop'` (see
--- G.UIDEF.shop's next_round_button node) -- not `end_shop` -- so the
--- hook has to be on G.FUNCS.toggle_shop specifically, or it's never
--- invoked at all. (An earlier attempt hooked a global `end_shop` and
--- then G.FUNCS.end_shop, neither of which is what this button actually
--- calls in this installed build.)
+-- Vanilla Perkeo is suppressed in Card:calculate_joker above, which also
+-- takes Blueprint/Brainstorm copies of it out of play -- their copy path
+-- runs through that same suppressed calculate. So the copy chain has to
+-- be resolved by hand here: Blueprint acts as the Joker to its right,
+-- Brainstorm as the leftmost Joker, and either can point at another
+-- copier, forming a chain.
+HEX_PERKEO_KEY = "j_perkeo"
+HEX_BLUEPRINT_KEY = "j_blueprint"
+HEX_BRAINSTORM_KEY = "j_brainstorm"
+
+local function hex_joker_center_key(c)
+    return (c and c.config and c.config.center and c.config.center.key) or nil
+end
+
+-- Follows the Blueprint/Brainstorm chain starting at slot `i` and returns
+-- the Joker that slot ends up actually performing. Returns nil if the
+-- chain dead-ends (a Blueprint in the rightmost slot) or loops back on
+-- itself (a Brainstorm in slot 1), matching vanilla's "does nothing" in
+-- both of those cases.
+local function hex_resolve_copy_chain(i)
+    local cards = G.jokers and G.jokers.cards
+    if not cards then return nil end
+
+    local seen = {}
+    local idx = i
+
+    -- A chain can't be longer than the number of Jokers, so this doubles
+    -- as the loop guard.
+    for _ = 1, #cards do
+        local c = cards[idx]
+        if not c or seen[idx] then return nil end
+        seen[idx] = true
+
+        local key = hex_joker_center_key(c)
+
+        if key == HEX_BLUEPRINT_KEY then
+            idx = idx + 1
+        elseif key == HEX_BRAINSTORM_KEY then
+            idx = 1
+        else
+            return c
+        end
+    end
+
+    return nil
+end
+
+-- Every Joker slot that should fire Perkeo this shop exit: Perkeo itself,
+-- plus any copier resolving to it. Returns the ACTING cards (the Blueprint
+-- rather than the Perkeo), so the "Duplicated!" text appears on the card
+-- that did the work, the way vanilla copies do.
+function hex_perkeo_trigger_cards()
+    local out = {}
+    local cards = G.jokers and G.jokers.cards
+    if not cards then return out end
+
+    for i, c in ipairs(cards) do
+        local key = hex_joker_center_key(c)
+        local target
+
+        if key == HEX_BLUEPRINT_KEY or key == HEX_BRAINSTORM_KEY then
+            target = hex_resolve_copy_chain(i)
+
+            -- Respect the copied Joker's own blueprint_compat flag rather
+            -- than assuming, so this stays correct if that ever changes.
+            if target and not (target.config and target.config.center
+                and target.config.center.blueprint_compat) then
+                target = nil
+            end
+        else
+            target = c
+        end
+
+        if target and hex_joker_center_key(target) == HEX_PERKEO_KEY then
+            out[#out + 1] = c
+        end
+    end
+
+    return out
+end
+
 local hex_old_toggle_shop = G.FUNCS.toggle_shop
 
 G.FUNCS.toggle_shop = function(e)
-    if G.jokers and G.jokers.cards then
-        for _, j in ipairs(G.jokers.cards) do
-            if j.ability and j.ability.name == 'Perkeo' then
-                if G.consumeables and G.consumeables.cards[1] then
+    for _, source in ipairs(hex_perkeo_trigger_cards()) do
+        if G.consumeables and G.consumeables.cards[1] then
 
-                    -- Same eligible-pool filter as before: excludes
-                    -- Ritual/Star/Galaxy-set consumables.
-                    local eligible = {}
-                    for _, c in ipairs(G.consumeables.cards) do
-                        local blocked = c.ability
-                            and HEX_PERKEO_BLOCKED_SETS[c.ability.set]
-                        if not blocked then
-                            eligible[#eligible + 1] = c
-                        end
-                    end
-
-                    if eligible[1] then
-                        G.E_MANAGER:add_event(Event({
-                            func = function()
-                                local card = copy_card(pseudorandom_element(eligible, pseudoseed('perkeo')), nil)
-                                card:set_edition({negative = true}, true)
-                                card:add_to_deck()
-                                G.consumeables:emplace(card)
-                                return true
-                            end
-                        }))
-                        card_eval_status_text(j, 'extra', nil, nil, nil, {message = localize('k_duplicated_ex')})
-                    end
+            -- Same eligible-pool filter as before: excludes
+            -- Ritual/Star/Galaxy-set consumables. Recomputed per trigger,
+            -- so with two effective Perkeos the second one can roll the
+            -- copy the first one just made.
+            local eligible = {}
+            for _, c in ipairs(G.consumeables.cards) do
+                local blocked = c.ability
+                    and HEX_PERKEO_BLOCKED_SETS[c.ability.set]
+                if not blocked then
+                    eligible[#eligible + 1] = c
                 end
+            end
+
+            if eligible[1] then
+                G.E_MANAGER:add_event(Event({
+                    func = function()
+                        local card = copy_card(pseudorandom_element(eligible, pseudoseed('perkeo')), nil)
+                        card:set_edition({negative = true}, true)
+                        card:add_to_deck()
+                        G.consumeables:emplace(card)
+                        return true
+                    end
+                }))
+                card_eval_status_text(source, 'extra', nil, nil, nil, {message = localize('k_duplicated_ex')})
             end
         end
     end
 
     return hex_old_toggle_shop(e)
 end
-
 
 
 SMODS.Joker{
@@ -5757,7 +5840,7 @@ SMODS.Joker{
         name = "Lemniscate",
         text = {
             "Raises Mult to the power of {C:purple}^#1#{}",
-            "Gains {C:purple}+0.01{} power",
+            "Gains {C:purple}+#2#{} power",
             "for every card triggered",
         }
     },
@@ -5786,7 +5869,8 @@ SMODS.Joker{
     loc_vars = function(self, info_queue, card)
         return {
             vars = {
-                card.ability.extra.exponent or big(1)
+                card.ability.extra.exponent or big(1),
+                card.ability.extra.exponent_gain or big(0.01),
             }
         }
     end,
@@ -7475,6 +7559,16 @@ local function hex_filter_already_picked(centers, picked)
 end
 
 
+local function hex_pick_center(centers, picked)
+    if not centers or #centers == 0 then return nil end
+
+    local fresh = hex_filter_already_picked(centers, picked)
+    local pool = (#fresh > 0) and fresh or centers
+
+    return pool[math.random(#pool)].key
+end
+
+
 -- Star Pack: a Spectral-pack-style booster (3 cards shown, choose 1)
 -- whose contents are always drawn from this mod's own Star pool (see
 -- hex_get_star_centers above) instead of the normal Spectral/Tarot
@@ -7766,7 +7860,7 @@ local function hex_consumable_already_owned(key)
 end
 
 local HEX_GALAXY_PACK_WEIGHT = HEX_STAR_PACK_WEIGHT 
-local function hex_galaxy_pack_create_card(card, i)
+local function hex_galaxy_pack_create_card(self, card, i)
     if i == 1 then
         card.hex_galaxy_pack_picked = {}
     end
@@ -7798,6 +7892,10 @@ local function hex_galaxy_pack_create_card(card, i)
         end
     end
 
+    -- 1. Preferred: a Galaxy card not yet shown in this pack. Strict --
+    --    hex_filter_already_picked, not hex_pick_center, so that running
+    --    dry actually falls through to the Nebula step below instead of
+    --    silently repeating a Galaxy card forever.
     if not chosen_key then
         local galaxies = hex_filter_already_picked(hex_get_galaxy_centers(), card.hex_galaxy_pack_picked)
         if #galaxies > 0 then
@@ -7805,6 +7903,21 @@ local function hex_galaxy_pack_create_card(card, i)
         end
     end
 
+    -- 2. Genuinely out of fresh Galaxy cards (Wormhole-inflated packs can
+    --    show more cards than there are eligible Galaxy centers) -> Nebula
+    --    cards. hex_pick_center prefers unshown Nebulas and permits repeats
+    --    once those run out too.
+    if not chosen_key then
+        chosen_key = hex_pick_center(hex_get_nebula_centers(), card.hex_galaxy_pack_picked)
+    end
+
+    -- 3. No Nebula centers eligible at all -> repeat a Galaxy card, which
+    --    is still a better fit for a Galaxy Pack than a Joker.
+    if not chosen_key then
+        chosen_key = hex_pick_center(hex_get_galaxy_centers(), card.hex_galaxy_pack_picked)
+    end
+
+    -- 4. Absolute last resort: nothing in either pool is eligible.
     if not chosen_key then
         return { set = "Joker", area = G.pack_cards }
     end
@@ -14210,14 +14323,14 @@ SMODS.Consumable{
 -- else on a Joker's `ability` table -- growth rates, odds, repetition
 -- counts, internal flags, anything from any other mod -- is left
 -- completely untouched, by default, with no exclusion list needed.
+--
+-- The one exception is `extra`, handled by HEX_ENTROPY_EXTRA_IS_STAT
+-- further down: vanilla Jokers that have only ONE number (Even Steven,
+-- Odd Todd, The Idol, and every money Joker) keep it in a generically
+-- named `extra` field, so the name alone can't tell us whether it's a
+-- stat or a growth rate. Those are opted in by Joker key, one at a time.
 -- ============================================================
 
--- Field name patterns recognized as an actual scoring stat (a current
--- value that contributes Chips/Mult/Xmult to a hand), matched against
--- the lowercased field name. Deliberately narrow and literal rather than
--- broad substring matches, so things like "Xmult_gain" (a growth RATE,
--- not the stat itself) are excluded by not matching "^xmult$"/"xmult$"
--- exactly at the end of the name.
 HEX_ENTROPY_SCORE_PATTERNS = {
     "^chips$",
     "^mult$",
@@ -14228,6 +14341,18 @@ HEX_ENTROPY_SCORE_PATTERNS = {
     "exponent$",     -- catches this mod's own `extra.exponent` fields
     "^power$",
     "power$",        -- catches Ruby/Sapphire/Topaz-style `extra.power`
+
+    -- Vanilla "type"/"held" stat fields. These do NOT match "xmult$" or
+    -- "^mult$" because of the prefix, so without these lines the Jolly/
+    -- Zany/Mad/Crazy/Droll family (t_mult), the Sly/Wily/Clever/Devious/
+    -- Crafty family (t_chips) and the Lusty/Greedy/Wrathful/Gluttonous
+    -- suit Jokers (t_mult) were all being skipped too.
+    "^t_mult$",
+    "^t_chips$",
+    "^h_mult$",
+    "^h_chips$",
+    "^h_x_mult$",
+    "^h_x_chips$",
 
     -- Power/tetration/pentation notation fields, as used throughout this
     -- mod's calculate() return tables and Card:calculate_joker (Ruby,
@@ -14244,6 +14369,7 @@ HEX_ENTROPY_SCORE_PATTERNS = {
 }
 
 -- Field name patterns recognized as a money/dollar bonus stat.
+-- ("dollars$" already covers p_dollars and h_dollars.)
 HEX_ENTROPY_MONEY_PATTERNS = {
     "^dollars$",
     "dollars$",
@@ -14273,6 +14399,83 @@ HEX_ENTROPY_NEVER_PATTERNS = {
     "numerator",
 }
 
+-- Jokers whose top-level `ability.extra` holds an actual Chips / Mult /
+-- Xmult / dollars value. ONLY these get their `extra` squared -- every
+-- other Joker's `extra` (Hologram's 0.25 Xmult-per-card, Vampire's 0.1,
+-- Ride the Bus's +1, Riff-raff's "2 Jokers", Burglar's "+3 hands",
+-- Invisible Joker's round counter, ...) is left alone exactly as before.
+--
+-- To support a modded Joker whose value lives in `extra`, just add its
+-- key here. A key listed whose `extra` is nil or non-numeric is simply
+-- ignored, so a wrong guess costs nothing.
+HEX_ENTROPY_EXTRA_IS_STAT = {
+    -- ---- Mult ----
+    ["j_even_steven"]      = true,   -- +Mult per even card scored
+    ["j_fibonacci"]        = true,
+    ["j_mystic_summit"]    = true,
+    ["j_erosion"]          = true,
+    ["j_abstract"]         = true,
+    ["j_half"]             = true,
+    ["j_gros_michel"]      = true,
+    ["j_cavendish"]        = true,
+    ["j_smiley"]           = true,
+    ["j_shoot_the_moon"]   = true,
+    ["j_onyx_agate"]       = true,
+    ["j_popcorn"]          = true,
+    ["j_bootstraps"]       = true,
+
+    -- ---- Chips ----
+    ["j_odd_todd"]         = true,   -- +Chips per odd card scored
+    ["j_scary_face"]       = true,
+    ["j_arrowhead"]        = true,
+    ["j_banner"]           = true,
+    ["j_blue_joker"]       = true,
+    ["j_ice_cream"]        = true,
+    ["j_stone"]            = true,
+    ["j_stuntman"]         = true,
+    ["j_bull"]             = true,
+
+    -- ---- Xmult ----
+    ["j_idol"]             = true,   -- X Mult per copy of the idol card
+    ["j_photograph"]       = true,
+    ["j_baron"]            = true,
+    ["j_card_sharp"]       = true,
+    ["j_baseball"]         = true,
+    ["j_ancient"]          = true,
+    ["j_ramen"]            = true,
+    ["j_acrobat"]          = true,
+    ["j_flower_pot"]       = true,
+    ["j_seeing_double"]    = true,
+    ["j_drivers_license"]  = true,
+    ["j_blackboard"]       = true,
+    ["j_bloodstone"]       = true,
+    ["j_duo"]              = true,
+    ["j_trio"]             = true,
+    ["j_family"]           = true,
+    ["j_order"]            = true,
+    ["j_tribe"]            = true,
+
+    -- ---- Money ----
+    ["j_golden"]           = true,
+    ["j_delayed_grat"]     = true,
+    ["j_business"]         = true,
+    ["j_faceless"]         = true,
+    ["j_mail"]             = true,
+    ["j_trading"]          = true,
+    ["j_matador"]          = true,
+    ["j_rough_gem"]        = true,
+    ["j_cloud_9"]          = true,
+    ["j_rocket"]           = true,
+    ["j_satellite"]        = true,
+    ["j_to_the_moon"]      = true,
+    ["j_ticket"]           = true,
+    ["j_reserved_parking"] = true,
+    ["j_gift"]             = true,
+
+    -- ---- Legendary ----
+    ["j_triboulet"]        = true,   
+}
+
 function hex_entropy_matches_any(name, patterns)
     if type(name) ~= "string" then return false end
     local lname = name:lower()
@@ -14295,17 +14498,54 @@ function hex_entropy_should_square_field(name)
         or hex_entropy_matches_any(name, HEX_ENTROPY_MONEY_PATTERNS)
 end
 
+
+
+HEX_ENTROPY_EXTRA_SUBFIELDS_BY_KEY = {
+    ["j_stuntman"] = { chip_mod = true },   -- static +250 Chips
+}
+
+-- The reverse: nested fields that DO match a scoring/money pattern but
+-- are a threshold or requirement rather than a payout. Bootstraps'
+-- `extra.dollars` is the "per $5 you have" divisor -- squaring it to $25
+-- would nerf the Joker instead of buffing it.
+HEX_ENTROPY_EXTRA_SKIP_SUBFIELDS_BY_KEY = {
+    ["j_bootstraps"] = { dollars = true },
+}
+
 -- Recursively walks `t`, squaring only fields whose name passes
 -- hex_entropy_should_square_field, and descending one extra level into
 -- any plain sub-table (this is what reaches into `ability.extra`, where
 -- most custom Jokers -- including several in this mod -- actually keep
 -- their Xmult/exponent/power fields). `depth` guards against descending
 -- forever in case of any unexpected nested structure.
-function hex_entropy_square_table(t, depth)
+--
+-- `ctx` carries the three per-Joker overrides set up by
+-- hex_entropy_apply_to_card:
+--   ctx.square_extra -- square a bare numeric top-level `extra`
+--   ctx.allow        -- extra sub-fields to square despite their name
+--   ctx.skip         -- extra sub-fields to leave alone despite their name
+function hex_entropy_square_table(t, depth, ctx)
     if type(t) ~= "table" or depth > 2 then return end
+    ctx = ctx or {}
 
     for k, v in pairs(t) do
-        if hex_entropy_should_square_field(k) then
+        local named = (type(k) == "string") and k or nil
+
+        -- Per-Joker skips always win, before any pattern matching.
+        local skipped = (depth == 2) and named and ctx.skip and ctx.skip[named]
+
+        local is_stat_field = false
+        if not skipped then
+            if hex_entropy_should_square_field(k) then
+                is_stat_field = true
+            elseif depth == 1 and ctx.square_extra and k == "extra" then
+                is_stat_field = true
+            elseif depth == 2 and named and ctx.allow and ctx.allow[named] then
+                is_stat_field = true
+            end
+        end
+
+        if is_stat_field then
             local scalable = false
 
             if type(v) == "number" then
@@ -14317,12 +14557,15 @@ function hex_entropy_square_table(t, depth)
 
             if scalable then
                 t[k] = to_big(v):mul(to_big(v))
+            elseif type(v) == "table" then
+                -- e.g. To Do List's `extra = { dollars = 4, ... }`
+                hex_entropy_square_table(v, depth + 1, ctx)
             end
-        elseif type(v) == "table" then
+        elseif type(v) == "table" and not skipped then
             -- Not a scoring/money field itself, but still descend into
             -- it (e.g. `extra`) in case IT contains a scoring/money field
             -- one level down.
-            hex_entropy_square_table(v, depth + 1)
+            hex_entropy_square_table(v, depth + 1, ctx)
         end
     end
 end
@@ -14332,11 +14575,17 @@ function hex_entropy_apply_to_card(card)
     if card.config.center.rarity == R_HEX_DIVINE.key then return false end
     if not card.ability then return false end
 
-    hex_entropy_square_table(card.ability, 1)
+    local center_key = card.config.center.key
+
+    local ctx = {
+        square_extra = (center_key and HEX_ENTROPY_EXTRA_IS_STAT[center_key]) or false,
+        allow = center_key and HEX_ENTROPY_EXTRA_SUBFIELDS_BY_KEY[center_key] or nil,
+        skip  = center_key and HEX_ENTROPY_EXTRA_SKIP_SUBFIELDS_BY_KEY[center_key] or nil,
+    }
+
+    hex_entropy_square_table(card.ability, 1, ctx)
     return true
 end
-
-
 
 
 
@@ -14399,10 +14648,262 @@ SMODS.Consumable{
 
 
 
+-- ============================================================
+-- Ritual: Singularity
+--
+-- Rewrites how every scaling Joker scales: a Joker that would reach
+-- base*n after n scalings now reaches base*(n^a), where a is the number
+-- of times this ritual has been used, plus 1. At zero uses a = 1 and the
+-- transform is the identity, so this is inert until the ritual is used.
+--
+-- Hooks SMODS.scale_card rather than using a calc_scaling handler,
+-- because calc_scaling is only dispatched for objects sitting in a Joker
+-- area -- a consumed ritual has no card to host one. Same dispatch point
+-- either way, so this affects the same Jokers Cryptid's Scalae does:
+-- anything scaling through the SMODS API. Jokers that mutate their
+-- ability fields directly are unaffected by both.
+-- ============================================================
+-- The exponent a, as a Big: uses + 1. At zero uses a = 1, n^1 = n, and
+-- the transform is the identity.
+function hex_singularity_exponent()
+    return to_big((G.GAME and G.GAME.hex_singularity_uses) or 0):add(big(1))
+end
+-- Which fields count as "a stat that scales". Reuses Entropy's own test,
+-- so `chips`, `mult`, `xmult`, `exponent`, `power` and `dollars` are
+-- watched, while `chip_mod`, `exponent_gain`, `Xmult_gain`, odds and
+-- counters are not -- those are the RATE, and the rate is what we're
+-- rewriting, not something to rewrite in turn.
+function hex_singularity_collect(t, depth, prefix, out)
+    if type(t) ~= "table" or depth > 2 then return end
+
+    for k, v in pairs(t) do
+        if type(k) == "string" then
+            if hex_entropy_should_square_field(k) then
+                local scalable = false
+
+                if type(v) == "number" then
+                    scalable = true
+                elseif type(v) == "table" or type(v) == "cdata" then
+                    local ok, has_mul = pcall(function() return v.mul ~= nil end)
+                    scalable = ok and has_mul or false
+                end
+
+                if scalable then
+                    out[#out + 1] = {
+                        tbl = t,
+                        key = k,
+                        path = prefix .. k,
+                        value = to_big(v),
+                    }
+                end
+
+            elseif type(v) == "table" and getmetatable(v) == nil then
+                -- Descend into plain sub-tables (`extra`), never into a Big
+                -- (which has a metatable) -- those are values, not containers.
+                hex_singularity_collect(v, depth + 1, prefix .. k .. ".", out)
+            end
+        end
+    end
+end
+
+
+-- Given a stat field name, finds the field next to it holding its
+-- per-step gain. Vanilla is consistent about this: chips -> chip_mod,
+-- mult -> mult_mod, Xmult -> Xmult_mod; SMODS.scale_card's implicit
+-- default is SMODS_scalar_<stat>; and this mod's own Jokers use
+-- <stat>_gain (Lemniscate's exponent / exponent_gain).
+-- Finds the field holding this stat's per-step gain. The first scaling
+-- tells us the exact amount gained, so the rate field is whichever
+-- sibling field currently equals it -- no name convention required, which
+-- matters because vanilla (chip_mod), SMODS (SMODS_scalar_chips) and this
+-- mod's own Jokers (exponent_gain) all name it differently. Name matching
+-- is kept as a fallback for when two fields share the same value.
+function hex_singularity_find_rate_field(t, key, delta)
+    local named = {
+        [key .. "_mod"] = true,
+        [key:gsub("s$", "") .. "_mod"] = true,
+        [key .. "_gain"] = true,
+        [key:gsub("s$", "") .. "_gain"] = true,
+        ["SMODS_scalar_" .. key] = true,
+    }
+
+    local by_value, by_name
+
+    for k, v in pairs(t) do
+        if type(k) == "string" and k ~= key then
+            local numeric = type(v) == "number"
+            if not numeric and (type(v) == "table" or type(v) == "cdata") then
+                local ok, has_mul = pcall(function() return v.mul ~= nil end)
+                numeric = ok and has_mul or false
+            end
+
+            if numeric then
+                if named[k] then by_name = by_name or k end
+                if delta and to_big(v):eq(delta) then
+                    if named[k] then return k end          -- both agree, done
+                    by_value = by_value or k
+                end
+            end
+        end
+    end
+
+    return by_name or by_value
+end
 
 
 
+-- lenient_bignum hands back a plain Lua number whenever the value still
+-- fits in a double, and only stays Big past that. Stat fields have to go
+-- back into the Joker in the same shape they came out, or every vanilla
+-- loc_vars that passes them to localize renders a table instead of a
+-- number -- which is what stopped the descriptions updating.
+function hex_singularity_lenient(v)
+    if lenient_bignum then return lenient_bignum(v) end
+    return v
+end
 
+-- Compares each watched field against its pre-calculate value. Any field
+-- that GREW just scaled, so the observed increase is replaced with the
+-- n-th polynomial step. Decreases are left alone: that's how shrinking
+-- Jokers (Ice Cream, Popcorn, Ramen) count down, and speeding up their
+-- decay would be a straight downgrade.
+function hex_singularity_rewrite(card, snapshot, a)
+    if #snapshot == 0 then return end
+
+    card.ability.hex_singularity_info = card.ability.hex_singularity_info or {}
+    local info = card.ability.hex_singularity_info
+
+    for _, s in ipairs(snapshot) do
+        local now = s.tbl[s.key]
+
+        if type(now) == "number" or type(now) == "table" or type(now) == "cdata" then
+            local delta = to_big(now):sub(s.value)
+
+            if delta:gt(big(0)) then
+                local entry = info[s.path]
+                if not entry then
+                    entry = { base = hex_singularity_lenient(delta), n = big(0) }
+                    info[s.path] = entry
+                end
+
+                entry.n = to_big(entry.n):add(big(1))
+                local n = entry.n
+
+                -- Cache the lookup: `false` means "searched, found nothing",
+                -- so it isn't re-searched on every single scaling.
+                if entry.rate_key == nil then
+                    entry.rate_key = hex_singularity_find_rate_field(s.tbl, s.key, delta) or false
+                end
+
+                if entry.rate_key then
+                    -- Gain for the NEXT step: base * ((n+1)^a - n^a). Written
+                    -- into the Joker's own rate field, so its description
+                    -- shows it and its own code applies it. The value itself
+                    -- is left alone -- it already grew by the rate we set
+                    -- last time, which keeps the running total on base*n^a.
+                    local next_step = n:add(big(1)):arrow(1, a):sub(n:arrow(1, a))
+
+                    if next_step:gt(big(0)) then
+                        s.tbl[entry.rate_key] = hex_singularity_lenient(
+                            to_big(entry.base):mul(next_step)
+                        )
+                    end
+                else
+                    -- No identifiable rate field -- rewrite the increase that
+                    -- just happened instead, as before.
+                    local step
+
+                    if n:lt(big(2)) then
+                        step = big(1)
+                    else
+                        step = n:arrow(1, a):sub(n:sub(big(1)):arrow(1, a))
+                    end
+
+                    if step:gt(big(0)) then
+                        s.tbl[s.key] = hex_singularity_lenient(
+                            s.value:add(to_big(entry.base):mul(step))
+                        )
+                    end
+                end
+            end
+        end
+    end
+end
+
+local hex_old_calculate_joker_singularity = Card.calculate_joker
+
+function Card:calculate_joker(context)
+    local a = hex_singularity_exponent()
+
+    -- Completely inert until the ritual has been used at least once, so
+    -- there's no snapshot cost on a normal run.
+    if not (a:gt(big(1)) and self.ability) then
+        return hex_old_calculate_joker_singularity(self, context)
+    end
+
+    local snapshot = {}
+    hex_singularity_collect(self.ability, 1, "", snapshot)
+
+    local ret = hex_old_calculate_joker_singularity(self, context)
+
+    hex_singularity_rewrite(self, snapshot, a)
+
+    return ret
+end
+
+
+SMODS.Consumable{
+    key = "singularity",
+    set = "ritual",
+
+    atlas = "HexRitualsQuantums",
+    pos = { x = 2, y = 1 }, -- next open frame after Entropy (1,1)
+
+    unlocked = true,
+    discovered = true,
+
+    in_pool = function(self)
+        return false             -- never naturally generated; must be granted directly
+    end,
+
+    loc_txt = {
+        name = "Singularity",
+        text = {
+            "Every {C:attention}scaling{} Joker",
+            "permanently scales at",
+            "{C:attention}O(n^#2#){}",
+            "{C:inactive}(n = times that Joker has scaled){}",
+            "{C:inactive}(Currently O(n^#1#)){}",
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        local a = hex_singularity_exponent()
+        return { vars = { a, a + 1 } }
+    end,
+
+    can_use = function(self, card)
+        return true
+    end,
+
+    use = function(self, card)
+        G.GAME.hex_singularity_uses = (G.GAME.hex_singularity_uses or 0) + 1
+
+        if G.jokers and G.jokers.cards then
+            for _, j in ipairs(G.jokers.cards) do
+                if j.juice_up then j:juice_up() end
+            end
+        end
+
+        G.GAME.hex_rituals_used = G.GAME.hex_rituals_used or {}
+        G.GAME.hex_rituals_used["singularity"] = true
+
+        card_eval_status_text(card, "extra", nil, nil, nil, {
+            message = "Singularity!",
+            colour = G.C.RITUAL
+        })
+    end,
+}
 
 
 
@@ -14836,6 +15337,7 @@ function Game:start_run(...)
     G.GAME.hex_heat_death_uses = G.GAME.hex_heat_death_uses or 0
     G.GAME.hex_grav_waves_unlocked = G.GAME.hex_grav_waves_unlocked or false
     G.GAME.hex_relativistic_jets_unlocked = G.GAME.hex_relativistic_jets_unlocked or false
+    G.GAME.hex_singularity_uses = G.GAME.hex_singularity_uses or 0
 
     -- Re-apply the hyperoperator scoring calculation on resume/load, since
     -- G.GAME.current_scoring_calculation_key isn't guaranteed to survive it.
@@ -15014,6 +15516,7 @@ G.FUNCS.create_ritual = function()
         "false_vacuum_decay",
         "heat_death",
         "entropy",
+        "singularity",
     }
 
     local rituals = {}
@@ -15067,10 +15570,12 @@ G.FUNCS.create_ritual = function()
 
 end
 
+
 -- Returns true if the player currently owns a "Showman" Joker, which in
 -- vanilla Balatro allows duplicate copies of otherwise-unique Jokers.
+-- (Key is "j_ring_master" -- see hex_owns_showman above.)
 local function hex_has_showman()
-    return #SMODS.find_card("j_showman") > 0
+    return hex_owns_showman()
 end
 
 -- Returns true if the player currently owns at least one copy of the Joker
@@ -15079,6 +15584,8 @@ end
 local function hex_owns_joker(key)
     return #SMODS.find_card(key) > 0
 end
+
+
 G.FUNCS.summon_transcendental = function()
 
     if not G.GAME then return end
@@ -15594,53 +16101,83 @@ end
 -- on G.shop_vouchers.cards (or on the G.shop_vouchers table's own
 -- identity, which turned out to be an unreliable "new shop" signal) to
 -- detect duplicates doesn't work.
---
--- Instead: track every voucher key WE'VE handed out since the shop was
--- last (re)entered, using G.STATE transitioning into G.STATES.SHOP as
--- the one unambiguous "this is a fresh shop" signal, and clear the
--- tracking table right at that moment. Every get_next_voucher_key call
--- in between (regardless of how many slots there are, or what order
--- they're actually created/emplaced in) checks and updates that same
--- table, so two slots rolled back-to-back can never end up with the
--- same voucher.
-local hex_voucher_batch_keys = {}
-local hex_voucher_last_state = nil
+---- Returns every Voucher key currently eligible for the shop, minus any
+-- key in `exclude`. get_current_pool already handles redeemed vouchers,
+-- locked ones, and unmet `requires` prerequisites, marking them
+-- 'UNAVAILABLE' rather than omitting them.
+local function hex_voucher_pool_excluding(exclude)
+    local pool = get_current_pool("Voucher")
+    local out = {}
 
-local hex_old_update_voucher_dedupe = Game.update
-function Game:update(dt)
-    hex_old_update_voucher_dedupe(self, dt)
-
-    if G.STATE == G.STATES.SHOP and hex_voucher_last_state ~= G.STATES.SHOP then
-        hex_voucher_batch_keys = {}
+    for _, key in ipairs(pool or {}) do
+        if key and key ~= "UNAVAILABLE" and not exclude[key] and G.P_CENTERS[key] then
+            out[#out + 1] = key
+        end
     end
-    hex_voucher_last_state = G.STATE
+
+    return out
 end
 
-local hex_old_get_next_voucher_key = get_next_voucher_key
+local hex_voucher_dedupe_rolls = 0
+local hex_old_emplace_voucher_dedupe = CardArea.emplace
 
-function get_next_voucher_key(_from_tag)
-    -- Also fold in anything already actually emplaced, as a belt-and-
-    -- braces check in case a voucher ever gets added to the shop
-    -- through some other path that doesn't call this function.
-    if G.shop_vouchers and G.shop_vouchers.cards then
-        for _, c in ipairs(G.shop_vouchers.cards) do
-            if c.config and c.config.center and c.config.center.key then
-                hex_voucher_batch_keys[c.config.center.key] = true
+function CardArea:emplace(card, ...)
+    if self == G.shop_vouchers
+    and card and card.config and card.config.center and card.config.center.key then
+
+        local present = {}
+        local duplicate = false
+
+        for _, c in ipairs(self.cards) do
+            local k = c.config and c.config.center and c.config.center.key
+            if k then
+                present[k] = true
+                if k == card.config.center.key then duplicate = true end
+            end
+        end
+
+        if duplicate then
+            present[card.config.center.key] = true
+
+            local eligible = hex_voucher_pool_excluding(present)
+
+            if #eligible > 0 then
+                -- Counter in the seed so a third or fourth slot doesn't
+                -- re-roll into the same replacement: pseudoseed advances
+                -- per key string, so a fixed string would only vary by
+                -- call order, and this makes that explicit.
+                hex_voucher_dedupe_rolls = hex_voucher_dedupe_rolls + 1
+
+                local new_key = pseudorandom_element(
+                    eligible,
+                    pseudoseed("hex_voucher_dedupe" .. hex_voucher_dedupe_rolls)
+                )
+
+                local new_center = G.P_CENTERS[new_key]
+                if new_center then
+                    card:set_ability(new_center, true)
+                    if card.set_cost then card:set_cost() end
+                end
+
+            else
+                -- Nothing else is eligible -- every other voucher is
+                -- already redeemed, locked, or behind an unmet
+                -- prerequisite. Rather than showing the same voucher
+                -- twice, fill the slot with vanilla's own Blank voucher
+                -- ("Does nothing?", the Antimatter prerequisite).
+                local blank = G.P_CENTERS.v_blank
+
+                if blank and card.config.center.key ~= "v_blank" then
+                    card:set_ability(blank, true)
+                    if card.set_cost then card:set_cost() end
+                end
+                -- If v_blank somehow isn't registered, the duplicate
+                -- stands rather than the slot breaking.
             end
         end
     end
 
-    local center = hex_old_get_next_voucher_key(_from_tag)
-
-    local it = 1
-    while hex_voucher_batch_keys[center] and it < 20 do
-        it = it + 1
-        center = hex_old_get_next_voucher_key(_from_tag)
-    end
-
-    hex_voucher_batch_keys[center] = true
-
-    return center
+    return hex_old_emplace_voucher_dedupe(self, card, ...)
 end
 
 
