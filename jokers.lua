@@ -24,8 +24,9 @@
 local mod = SMODS.current_mod
 
 
-
-
+local function hex_in_pool(self)
+    return hex_owns_showman() or #SMODS.find_card(self.key) == 0
+end
 
 
 -- Dragon Fruit: gives $6 every hand played, decaying by $1 after each
@@ -51,7 +52,7 @@ SMODS.Joker{
 
     atlas = "HexJokers",
     pos = { x = 0, y = 1 },
-
+    in_pool = hex_in_pool,
     rarity = 1,
     cost = 4,
     unlocked = true,
@@ -113,7 +114,7 @@ SMODS.Joker{
 
     atlas = "HexJokers",
     pos = { x = 0, y = 1 },
-
+    in_pool = hex_in_pool,
     rarity = 1,
     cost = 4,
     unlocked = true,
@@ -169,7 +170,7 @@ SMODS.Joker{
 
     atlas = "HexJokers",
     pos = { x = 0, y = 1 },
-
+    in_pool = hex_in_pool,
     rarity = 1,
     cost = 4,
     unlocked = true,
@@ -202,7 +203,7 @@ SMODS.Joker{
 
     atlas = "HexJokers",
     pos = { x = 0, y = 1 },
-
+    in_pool = hex_in_pool,
     rarity = 1,
     cost = 4,
     unlocked = true,
@@ -234,7 +235,7 @@ SMODS.Joker{
 
     atlas = "HexJokers",
     pos = { x = 0, y = 1 },
-
+    in_pool = hex_in_pool,
     rarity = 1,
     cost = 1,
     unlocked = true,
@@ -269,7 +270,7 @@ SMODS.Joker{
 
     atlas = "HexJokers",
     pos = { x = 0, y = 1 },
-
+    in_pool = hex_in_pool,
     rarity = 1,
     cost = 4,
     unlocked = true,
@@ -317,6 +318,7 @@ SMODS.Joker{
 
     atlas = "HexJokers",
     pos = { x = 0, y = 1 },
+    in_pool = hex_in_pool,
     rarity = 1,
     cost = 4,
     unlocked = true,
@@ -349,7 +351,7 @@ SMODS.Joker{
 
     atlas = "HexJokers",
     pos = { x = 0, y = 1 },
-
+    in_pool = hex_in_pool,
     rarity = 1,
     cost = 4,
     unlocked = true,
@@ -387,7 +389,7 @@ SMODS.Joker{
 
     atlas = "HexJokers",
     pos = { x = 0, y = 1 },
-
+    in_pool = hex_in_pool,
     rarity = 1,
     cost = 4,
     unlocked = true,
@@ -436,7 +438,7 @@ SMODS.Joker{
 
     atlas = "HexJokers",
     pos = { x = 0, y = 1 },
-
+    in_pool = hex_in_pool,
     rarity = 1,
     cost = 4,
     unlocked = true,
@@ -539,7 +541,7 @@ SMODS.Joker{
 
     atlas = "HexJokers",
     pos = { x = 0, y = 1 },
-
+    in_pool = hex_in_pool,
     rarity = 1,
     cost = 3,
     unlocked = true,
@@ -588,7 +590,7 @@ SMODS.Joker{
 
     atlas = "HexJokers",
     pos = { x = 0, y = 1 },
-
+    in_pool = hex_in_pool,
     rarity = 1,
     cost = 4,
     unlocked = true,
@@ -634,7 +636,7 @@ SMODS.Joker{
 
     atlas = "HexJokers",
     pos = { x = 0, y = 1 },
-
+    in_pool = hex_in_pool,
     rarity = 1,
     cost = 4,
     unlocked = true,
@@ -706,7 +708,7 @@ SMODS.Joker{
 
     atlas = "HexJokers",
     pos = { x = 0, y = 1 },
-
+    in_pool = hex_in_pool,
     rarity = 1,
     cost = 5,
     unlocked = true,
@@ -769,7 +771,7 @@ SMODS.Joker{
 
     atlas = "HexJokers",
     pos = { x = 0, y = 1 },
-
+    in_pool = hex_in_pool,
     rarity = 1,
     cost = 4,
     unlocked = true,
@@ -825,7 +827,8 @@ SMODS.Joker{
 
     -- Only appears after Cavendish breaks
     in_pool = function(self)
-        return G.GAME and G.GAME.cavendish_broken
+        return (hex_owns_showman() or #SMODS.find_card(self.key) == 0)
+            and G.GAME and G.GAME.cavendish_broken
     end,
 
     calculate = function(self, card, context)
@@ -1046,7 +1049,7 @@ SMODS.Joker{
 
     atlas = "HexJokers",
     pos = { x = 6, y = 0 }, -- next open frame in the atlas, adjust if taken
-
+    in_pool = hex_in_pool,
     rarity = 2,   -- uncommon
     cost = 6,
     unlocked = true,
@@ -1087,6 +1090,7 @@ SMODS.Joker{
     config = { extra = { Xmult = big(1), Xmult_gain = big(0.25) } },
     atlas = "HexJokers",
     pos = { x = 1, y = 0 }, -- second frame in the atlas (sprite to the right)
+    in_pool = hex_in_pool,
     rarity = 3,             -- 1 common, 2 uncommon, 3 rare, 4 legendary
     cost = 8,
     unlocked = true,
@@ -1137,6 +1141,8 @@ SMODS.Joker{
 
     rarity = 3,
     cost = 8,
+    in_pool = hex_in_pool,
+
 
     unlocked = true,
     discovered = true,
@@ -1202,9 +1208,8 @@ SMODS.Joker{
     pos = { x = 8, y = 0 },
 
     rarity = 3,
-    in_pool = function(self)
-        return true
-    end,
+    in_pool = hex_in_pool,
+
 
     cost = 20,
     unlocked = true,
