@@ -1332,6 +1332,9 @@ SMODS.Joker{
     end,
 }
 
+
+
+
 SMODS.Joker{
     key = "bonus_joker",
     loc_txt = {
@@ -1473,6 +1476,80 @@ SMODS.Joker{
     eternal_compat = true,
 }
 
+
+SMODS.Joker{
+    key = "boykisser",
+
+    loc_txt = {
+        name = "Boykisser",
+        text = {
+            "Gains {X:mult,C:white}X1{} Mult for every",
+            "{C:purple}6{} {C:purple}Hex points{} owned",
+            "{C:inactive}(Currently {}{X:mult,C:white}X#1#{}{C:inactive} Mult){}",
+            "{C:red}Destroys itself{} if played",
+            "hand is a {C:attention}Straight{}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 4, y = 8 },
+    soul_pos = { x = 0, y = 9 },
+
+    rarity = 4,
+    in_pool = hex_in_pool,
+    cost = 20,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    -- Shows the current live Xmult (1 + floor(hex_points / 6)) in the
+    -- card's own text, computed the same way calculate() below applies
+    -- it. Guards G.GAME being nil since loc_vars can also be called
+    -- from the collection screen outside of a run.
+    loc_vars = function(self, info_queue, card)
+        local hex_points = (G.GAME and G.GAME.hex_points) or big(0)
+        local bonus = hex_points:div(big(6)):floor()
+        local xmult = big(1):add(bonus)
+
+        return { vars = { xmult } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            local hex_points = G.GAME.hex_points or big(0)
+            local bonus = hex_points:div(big(6)):floor()
+            local xmult = big(1):add(bonus)
+
+            return {
+                Xmult = xmult,
+            }
+        end
+
+        -- Self-destructs if a Straight is played. context.before fires
+        -- before context.joker_main in the same scoring pass, so this
+        -- hand's own Xmult still applies (via the joker_main branch
+        -- above) before the deferred dissolve actually removes the
+        -- card -- same "still contributes to the hand that kills it,
+        -- then it's gone" pattern Dragon Fruit uses.
+        if context.before and next(context.poker_hands["Straight"]) and not context.blueprint then
+            G.E_MANAGER:add_event(Event({
+                trigger = "after",
+                delay = 0.3,
+                func = function()
+                    card:start_dissolve()
+                    return true
+                end
+            }))
+
+            return {
+                message = "Destroyed!",
+                colour = G.C.RED,
+            }
+        end
+    end,
+}
+
 SMODS.Joker{
     key = "green_screen",
     loc_txt = {
@@ -1488,6 +1565,7 @@ SMODS.Joker{
     atlas = "HexJokers",
     pos = { x = 0, y = 0 }, -- first frame in the atlas
     rarity = 4,             -- 1 common, 2 uncommon, 3 rare, 4 legendary
+    in_pool = hex_in_pool,
     cost = 20,
     unlocked = true,
     discovered = true,
