@@ -410,6 +410,63 @@ SMODS.Joker{
     end,
 }
 
+SMODS.Joker{
+    key = "hatsune_miku",
+
+    loc_txt = {
+        name = "Hatsune Miku",
+        text = {
+            "Gains {C:chips}+15{} Chips for",
+            "every {C:attention}3{} or {C:attention}9{} triggered",
+            "{C:inactive}(Currently {}{C:chips}+#1#{}{C:inactive} Chips){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 2 },
+
+    rarity = 1,
+    in_pool = hex_in_pool,
+    cost = 4,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            chips = 0,
+            chips_gain = 15,
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.chips } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            return {
+                chips = card.ability.extra.chips,
+            }
+        end
+
+        -- Every triggered card counts (retriggering counts, same as
+        -- Lemniscate above), gated on rank rather than enhancement.
+        if context.individual and context.cardarea == G.play and not context.blueprint then
+            local rank = context.other_card.base and context.other_card.base.value
+
+            if rank == "3" or rank == "9" then
+                card.ability.extra.chips = card.ability.extra.chips + card.ability.extra.chips_gain
+
+                return {
+                    message = localize("k_upgrade_ex"),
+                    colour = G.C.CHIPS,
+                }
+            end
+        end
+    end,
+}
 
 -- Cubed Joker: +0.1 Xchips permanently for every 8 cards scored
 -- (counting each individual scoring event, so a retriggered card
