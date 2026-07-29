@@ -1592,7 +1592,83 @@ SMODS.Joker{
 }
 
 
+-- Wall Clock: +10 Chips and +1 Mult every 10 real-world seconds since
+-- this card was acquired. Chains onto Game:update the same way the
+-- Absolute rarity's rainbow-color effect already does in main.lua
+-- (captures the previous Game.update, calls it first, then does its
+-- own thing) -- this is a second, independent hook on top of that one,
+-- so both run every frame without conflicting.
+local hex_old_update_wall_clock = Game.update
 
+function Game:update(dt)
+    hex_old_update_wall_clock(self, dt)
+
+    if G.jokers and G.jokers.cards then
+        for _, j in ipairs(G.jokers.cards) do
+            if j.config and j.config.center
+            and j.config.center.key == ("j_" .. mod.prefix .. "_wall_clock") then
+
+                -- Lazily starts from 0 the first frame this specific
+                -- card is seen, which is effectively "since it was
+                -- created" -- no separate on-acquire hook needed.
+                j.ability.extra.elapsed = (j.ability.extra.elapsed or 0) + dt
+
+                while j.ability.extra.elapsed >= 10 do
+                    j.ability.extra.elapsed = j.ability.extra.elapsed - 10
+                    j.ability.extra.chips = (j.ability.extra.chips or 0) + 20
+                    j.ability.extra.mult = (j.ability.extra.mult or 0) + 2
+                end
+            end
+        end
+    end
+end
+
+SMODS.Joker{
+    key = "wall_clock",
+
+    loc_txt = {
+        name = "Wall Clock",
+        text = {
+            "Every {C:attention}10 seconds{} since",
+            "gaining this Joker, it gains",
+            "{C:chips}+20{} Chips and {C:mult}+2{} Mult",
+            "{C:inactive}(Currently {}{C:chips}+#1#{}{C:inactive} Chips){}",
+            "{C:inactive}({}{C:mult}+#2#{}{C:inactive} Mult){}",
+            ""
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 1, y = 0 },
+
+    rarity = 3,
+    cost = 8,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            chips = 0,
+            mult = 0,
+            elapsed = 0,
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.chips, card.ability.extra.mult } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            return {
+                chips = card.ability.extra.chips,
+                mult = card.ability.extra.mult,
+            }
+        end
+    end,
+}
 
 
 
@@ -1818,6 +1894,77 @@ G.FUNCS.toggle_shop = function(e)
     return hex_old_toggle_shop(e)
 end
 
+SMODS.Joker{
+    key = "accumulation_joker",
+
+    loc_txt = {
+        name = "Accumulation Joker",
+        text = {
+            "Gains {X:mult,C:white}X0.25{} Mult after",
+            "every {C:attention}Small{} and {C:attention}Big Blind{}",
+            "Gains {X:chips,C:white}X0.5{} Chips after",
+            "every {C:attention}Boss Blind{}",
+            "{C:inactive}(Currently {}{X:mult,C:white}X#1#{}{C:inactive} Mult){}",
+            "{C:inactive}({}{X:chips,C:white}X#2#{}{C:inactive} Chips){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 1, y = 0 },
+
+    rarity = 3,
+    cost = 8,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            Xmult = big(1),
+            Xmult_gain = big(0.25),
+            xchips = big(1),
+            xchips_gain = big(0.5),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.Xmult, card.ability.extra.xchips } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            return {
+                Xmult = card.ability.extra.Xmult,
+                x_chips = card.ability.extra.xchips,
+            }
+        end
+
+        if context.end_of_round
+        and not context.blueprint
+        and card.hex_accumulation_last_round ~= G.GAME.round then
+
+            card.hex_accumulation_last_round = G.GAME.round
+
+            if G.GAME.blind and G.GAME.blind.boss then
+                card.ability.extra.xchips = card.ability.extra.xchips:add(card.ability.extra.xchips_gain)
+
+                return {
+                    message = localize("k_upgrade_ex"),
+                    colour = G.C.CHIPS,
+                }
+            else
+                card.ability.extra.Xmult = card.ability.extra.Xmult:add(card.ability.extra.Xmult_gain)
+
+                return {
+                    message = localize("k_upgrade_ex"),
+                    colour = G.C.MULT,
+                }
+            end
+        end
+    end,
+}
+
 
 SMODS.Joker{
     key = "the_seal_of_aces",
@@ -1950,7 +2097,66 @@ SMODS.Joker{
 }
 
 
+SMODS.Joker{
+    key = "tradeoff",
 
+    loc_txt = {
+        name = "Tradeoff",
+        text = {
+            "Gives {C:chips}+1000{} Chips",
+            "but gives {X:mult,C:white}X0.75{} Mult",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 1, y = 0 },
+    in_pool = hex_in_pool,
+    rarity = 3,
+    cost = 8,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            return {
+                chips = 1000,
+                Xmult = 0.75,
+            }
+        end
+    end,
+}
+
+SMODS.Joker{
+    key = "hypergrowth",
+
+    loc_txt = {
+        name = "Hypergrowth",
+        text = {
+            "Gives {C:purple}^1.01{} Mult and Chips",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 1, y = 0 },
+    in_pool = hex_in_pool,
+    rarity = 3,
+    cost = 8,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            return {
+                e_mult = 1.01,
+                e_chips = 1.01,
+            }
+        end
+    end,
+}
 
 
 
