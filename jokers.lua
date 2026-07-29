@@ -940,7 +940,7 @@ SMODS.Joker{
     end,
 }
 
--- Streak: +7 Mult permanently for every Blind won in exactly one hand;
+-- Winning Streak: +7 Mult permanently for every Blind won in exactly one hand;
 -- resets to 0 the moment a Blind takes more than one hand to win.
 -- Hands played this round are counted at context.joker_main (fires
 -- once per hand played), checked/reset at context.end_of_round (once
@@ -950,7 +950,7 @@ SMODS.Joker{
     key = "streak",
 
     loc_txt = {
-        name = "Streak",
+        name = "Winning Streak",
         text = {
             "Gains {C:mult}+7{} Mult for every",
             "Blind won in {C:attention}one hand{},",
@@ -1010,6 +1010,8 @@ SMODS.Joker{
         end
     end,
 }
+
+
 
 SMODS.Joker{
     key = "leftovers",
