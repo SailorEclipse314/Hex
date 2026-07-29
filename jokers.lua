@@ -105,9 +105,8 @@ SMODS.Joker{
     loc_txt = {
         name = "Snowball",
         text = {
-            "Gives {C:mult}+#1#{} Mult,",
-            "gained Mult increases by",
-            "{C:mult}+3{} at the end of round",
+            "Gains {C:mult}+2{} Mult",
+            "at the end of round",
             "{C:inactive}(Currently {}{C:mult}+#1#{}{C:inactive} Mult){}",
         }
     },
@@ -125,7 +124,7 @@ SMODS.Joker{
     config = {
         extra = {
             mult = 0,
-            mult_gain = 3,
+            mult_gain = 2,
         }
     },
 
@@ -154,6 +153,104 @@ SMODS.Joker{
         end
     end,
 }
+
+
+
+
+
+
+-- The Single: X3 Chips when the played hand IS a High Card (not just
+-- "contains" one -- every hand technically contains a high card, so
+-- this uses context.scoring_name to match only when High Card is the
+-- actual scored hand).
+SMODS.Joker{
+    key = "the_single",
+
+    loc_txt = {
+        name = "The Single",
+        text = {
+            "Gives {X:chips,C:white}X3{} Chips when",
+            "playing a {C:attention}High Card{}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 1 },
+    in_pool = hex_in_pool,
+    rarity = 2,
+    cost = 5,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    calculate = function(self, card, context)
+        if context.joker_main and context.scoring_name == "High Card" then
+            return {
+                x_chips = 3,
+                colour = G.C.CHIPS,
+            }
+        end
+    end,
+}
+
+-- Devilish Joker: +0.66 Xmult if the played hand is exactly a Three of
+-- a Kind made of 6s. Checks context.scoring_name == "Three of a Kind"
+-- first (so a Full House containing three 6s doesn't count), then
+-- verifies every card in that scoring group is a 6 via card.base.value.
+SMODS.Joker{
+    key = "devilish_joker",
+
+    loc_txt = {
+        name = "Devilish Joker",
+        text = {
+            "Gives {X:mult,C:white}X6.66{} Mult if",
+            "played hand is a",
+            "{C:attention}Three of a Kind{} of {C:attention}6s{}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 1 },
+    in_pool = hex_in_pool,
+    rarity = 2,
+    cost = 5,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    calculate = function(self, card, context)
+        if context.joker_main and context.scoring_name == "Three of a Kind" then
+            -- context.poker_hands[key] is a list of card GROUPINGS, not a
+            -- flat list of cards -- the actual scoring cards are at [1].
+            local groups = context.poker_hands["Three of a Kind"]
+            local trip_cards = groups and groups[1]
+            local all_sixes = trip_cards and #trip_cards > 0
+
+            if all_sixes then
+                for _, c in ipairs(trip_cards) do
+                    if not (c.base and c.base.value == "6") then
+                        all_sixes = false
+                        break
+                    end
+                end
+            end
+
+            if all_sixes then
+                return {
+                    Xmult = 6.66,
+                    colour = G.C.MULT,
+                }
+            end
+        end
+    end,
+}
+
+
+
+
+
 
 -- Queer Joker: +69 Chips if the played hand is not a Straight.
 SMODS.Joker{
@@ -212,7 +309,7 @@ SMODS.Joker{
     eternal_compat = true,
 
     calculate = function(self, card, context)
-        if context.joker_main and not next(context.poker_hands["Pair"]) then
+        if context.joker_main and not context.scoring_name == "Pair" then
             return {
                 mult = 10,
                 colour = G.C.MULT,
@@ -613,6 +710,111 @@ SMODS.Joker{
                     colour = G.C.CHIPS,
                 }
             end
+        end
+    end,
+}
+
+-- Overtime: costs $5 and gives +3 Hex points, both at the end of round.
+-- Same end_of_round + per-card round-stamp dedupe used by
+-- Snowball/Totem/Scientist/Streak above (context.end_of_round firing
+-- multiple times per card in this build). Hex points are applied via
+-- direct state mutation (not a native scoring field), same as Totem.
+SMODS.Joker{
+    key = "overtime",
+
+    loc_txt = {
+        name = "Overtime",
+        text = {
+            "Costs {C:money}$5{} at the end of",
+            "round, but gives {C:purple}+3{}",
+            "{C:purple}Hex points{} at the end of round",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 1 },
+    in_pool = hex_in_pool,
+    rarity = 2,
+    cost = 5,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    calculate = function(self, card, context)
+        if context.end_of_round
+        and not context.blueprint
+        and card.hex_overtime_last_round ~= G.GAME.round then
+
+            card.hex_overtime_last_round = G.GAME.round
+
+            G.GAME.hex_points = (G.GAME.hex_points or big(0)):add(big(3))
+
+            return {
+                dollars = -5,
+                colour = G.C.MONEY,
+            }
+        end
+    end,
+}
+
+-- Sharp Card: X4 Chips if the played hand type hasn't been played yet
+-- this round. Tracked with our own round-scoped set (reset whenever
+-- G.GAME.round changes) rather than any vanilla per-round counter,
+-- since we can't verify a specific field name for that in this build.
+-- The check-and-mark step only runs once per actual hand played
+-- (stamped via G.GAME.current_round.hands_left, which decrements
+-- exactly once per hand played), not once per Sharp Card owned --
+-- otherwise a second copy would see the first copy's own mark and
+-- wrongly treat a genuinely-new hand as already played.
+SMODS.Joker{
+    key = "sharp_card",
+
+    loc_txt = {
+        name = "Sharp Card",
+        text = {
+            "Gives {C:chips}X4{} Chips if the",
+            "played hand hasn't been",
+            "played yet this round",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 1 },
+    in_pool = hex_in_pool,
+    rarity = 2,
+    cost = 6,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    calculate = function(self, card, context)
+        if context.before then
+            G.GAME.hex_sharp_card_hands = G.GAME.hex_sharp_card_hands or {}
+
+            if G.GAME.hex_sharp_card_round ~= G.GAME.round then
+                G.GAME.hex_sharp_card_round = G.GAME.round
+                G.GAME.hex_sharp_card_hands = {}
+            end
+
+            if G.GAME.hex_sharp_card_last_hands_left ~= G.GAME.current_round.hands_left then
+                G.GAME.hex_sharp_card_last_hands_left = G.GAME.current_round.hands_left
+
+                local hand_name = context.scoring_name
+                G.GAME.hex_sharp_card_is_new_hand = hand_name and not G.GAME.hex_sharp_card_hands[hand_name]
+
+                if hand_name then
+                    G.GAME.hex_sharp_card_hands[hand_name] = true
+                end
+            end
+        end
+
+        if context.joker_main and G.GAME.hex_sharp_card_is_new_hand then
+            return {
+                x_chips = 4,
+                colour = G.C.CHIPS,
+            }
         end
     end,
 }
