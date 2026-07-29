@@ -254,6 +254,180 @@ SMODS.Joker{
     end,
 }
 
+-- Face Value: each scored card gives Mult equal to its rank value
+-- (2-10 = face value, Jack/Queen/King = 10, Ace = 11) -- the same
+-- rank-value mapping vanilla uses for base Chips, just applied to Mult
+-- here instead. Looked up off card.base.value (the same field The Seal
+-- of Aces above already checks), not an assumed numeric card field.
+local HEX_FACE_VALUE_RANK_TO_MULT = {
+    ["Ace"] = 11,
+    ["King"] = 10,
+    ["Queen"] = 10,
+    ["Jack"] = 10,
+    ["10"] = 10,
+    ["9"] = 9,
+    ["8"] = 8,
+    ["7"] = 7,
+    ["6"] = 6,
+    ["5"] = 5,
+    ["4"] = 4,
+    ["3"] = 3,
+    ["2"] = 2,
+}
+
+SMODS.Joker{
+    key = "face_value",
+
+    loc_txt = {
+        name = "Face Value",
+        text = {
+            "Played cards give {C:mult}Mult{}",
+            "equal to their {C:attention}rank{}",
+            "{C:inactive}(King, Queen, Jack give {}{C:mult}10{}{C:inactive}){}",
+            "{C:inactive}(Ace gives {}{C:mult}11{}{C:inactive}){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 1 },
+    in_pool = hex_in_pool,
+    rarity = 2,
+    cost = 5,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    calculate = function(self, card, context)
+        if context.individual and context.cardarea == G.play then
+            local rank_mult = HEX_FACE_VALUE_RANK_TO_MULT[context.other_card.base.value]
+
+            if rank_mult then
+                return {
+                    mult = rank_mult,
+                    card = context.other_card,
+                    colour = G.C.MULT,
+                }
+            end
+        end
+    end,
+}
+
+
+-- Cubed Joker: +0.1 Xchips permanently for every 8 cards scored
+-- (counting each individual scoring event, so a retriggered card
+-- counts toward the total more than once -- same convention as
+-- vanilla's own per-scored-card permanent-growth jokers).
+SMODS.Joker{
+    key = "cubed_joker",
+
+    loc_txt = {
+        name = "Cubed Joker",
+        text = {
+            "This Joker gains {X:chips,C:white}X#1#{} Chips",
+            "for every {C:attention}8{} cards scored",
+            "{C:inactive}(Currently {}{X:chips,C:white}X#2#{}{C:inactive} Chips){}",
+            "{C:inactive}(#3#/8 cards scored){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 1 },
+    in_pool = hex_in_pool,
+    rarity = 2,
+    cost = 6,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            xchips = big(1),
+            xchips_gain = big(0.1),
+            card_count = 0,
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return {
+            vars = {
+                card.ability.extra.xchips_gain,
+                card.ability.extra.xchips,
+                card.ability.extra.card_count,
+            }
+        }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            return {
+                x_chips = card.ability.extra.xchips,
+            }
+        end
+
+        if context.individual and context.cardarea == G.play and not context.blueprint then
+            card.ability.extra.card_count = card.ability.extra.card_count + 1
+
+            if card.ability.extra.card_count >= 8 then
+                card.ability.extra.card_count = card.ability.extra.card_count - 8
+                card.ability.extra.xchips = card.ability.extra.xchips:add(card.ability.extra.xchips_gain)
+
+                return {
+                    message = localize("k_upgrade_ex"),
+                    colour = G.C.CHIPS,
+                }
+            end
+        end
+    end,
+}
+
+-- Reverb: retriggers Aces, 10s, 9s, 8s, 7s, and 6s. Same
+-- context.repetition + context.cardarea == G.play shape as Encore
+-- above, gated on rank instead of enhancement key.
+local HEX_REVERB_RANKS = {
+    ["Ace"] = true,
+    ["10"] = true,
+    ["9"] = true,
+    ["8"] = true,
+    ["7"] = true,
+    ["6"] = true,
+}
+
+SMODS.Joker{
+    key = "reverb",
+
+    loc_txt = {
+        name = "Reverb",
+        text = {
+            "Retrigger played {C:attention}Aces{}, {C:attention}10s{}, {C:attention}9s{},",
+            "{C:attention}8s{}, {C:attention}7s{}, and {C:attention}6s{}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 1 },
+    in_pool = hex_in_pool,
+    rarity = 2,
+    cost = 6,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    calculate = function(self, card, context)
+        if context.repetition and context.cardarea == G.play and not context.blueprint then
+            if HEX_REVERB_RANKS[context.other_card.base.value] then
+                return {
+                    repetitions = 1,
+                    card = context.other_card,
+                }
+            end
+        end
+    end,
+}
+
+
 -- Totem: +10 Hex points at the end of a Boss Blind. Same
 -- end_of_round + G.GAME.blind.boss + per-card round-stamp dedupe that
 -- Overflow uses elsewhere in this file.
@@ -303,7 +477,77 @@ SMODS.Joker{
     end,
 }
 
--- Roadrunner: +$10 when skipping a Blind (context.skip_blind is the
+
+-- Necromancer: +0.2 Xchips permanently for every Spectral card used.
+-- Same Card:use_consumeable hook pattern as Scientist above -- an
+-- independent hook (different local name), so it stacks fine alongside
+-- that one rather than replacing it.
+SMODS.Joker{
+    key = "necromancer",
+
+    loc_txt = {
+        name = "Necromancer",
+        text = {
+            "This Joker gains {X:chips,C:white}X#1#{} Chips",
+            "for every {C:attention}Spectral{} card used",
+            "{C:inactive}(Currently {}{X:chips,C:white}X#2#{}{C:inactive} Chips){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 1 },
+    in_pool = hex_in_pool,
+    rarity = 2,
+    cost = 6,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            xchips = big(1),
+            xchips_gain = big(0.2),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.xchips_gain, card.ability.extra.xchips } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            return {
+                x_chips = card.ability.extra.xchips,
+            }
+        end
+    end,
+}
+
+local hex_old_use_consumeable_necromancer = Card.use_consumeable
+
+function Card:use_consumeable(area, copier)
+    if self.ability and self.ability.set == "Spectral" and not copier then
+        if G.jokers and G.jokers.cards then
+            for _, j in ipairs(G.jokers.cards) do
+                if j.config and j.config.center
+                and j.config.center.key == ("j_" .. mod.prefix .. "_necromancer") then
+
+                    j.ability.extra.xchips = j.ability.extra.xchips:add(j.ability.extra.xchips_gain)
+
+                    card_eval_status_text(j, "extra", nil, nil, nil, {
+                        message = localize("k_upgrade_ex"),
+                        colour = G.C.CHIPS,
+                    })
+                end
+            end
+        end
+    end
+
+    return hex_old_use_consumeable_necromancer(self, area, copier)
+end
+
+-- Roadrunner: +$5 when skipping a Blind (context.skip_blind is the
 -- same flag vanilla Red Card uses for its own "blind skipped" trigger).
 SMODS.Joker{
     key = "roadrunner",
@@ -311,7 +555,7 @@ SMODS.Joker{
     loc_txt = {
         name = "Roadrunner",
         text = {
-            "Gives {C:money}+$10{} when",
+            "Gives {C:money}+$5{} when",
             "{C:attention}skipping{} a Blind",
         }
     },
@@ -329,14 +573,14 @@ SMODS.Joker{
     calculate = function(self, card, context)
         if context.skip_blind and not context.blueprint then
             return {
-                dollars = 10,
+                dollars = 5,
                 colour = G.C.MONEY,
             }
         end
     end,
 }
 
--- Hoarder: +60 Chips for every consumable slot currently occupied
+-- Hoarder: +50 Chips for every consumable slot currently occupied
 -- (i.e. #G.consumeables.cards, not the total slot count).
 SMODS.Joker{
     key = "hoarder",
@@ -344,7 +588,7 @@ SMODS.Joker{
     loc_txt = {
         name = "Hoarder",
         text = {
-            "Gives {C:chips}+60{} Chips for every",
+            "Gives {C:chips}+50{} Chips for every",
             "{C:attention}Consumable{} slot in use",
         }
     },
@@ -365,7 +609,7 @@ SMODS.Joker{
 
             if used > 0 then
                 return {
-                    chips = used * 60,
+                    chips = used * 50,
                     colour = G.C.CHIPS,
                 }
             end
@@ -373,7 +617,7 @@ SMODS.Joker{
     end,
 }
 
--- Soul Candle: +10 Chips for every Hex point currently owned. Hex
+-- Soul Candle: +7 Chips for every Hex point currently owned. Hex
 -- points are an OmegaNum (big()) value in this mod, so the multiply
 -- goes through the big-number API rather than plain Lua arithmetic.
 SMODS.Joker{
@@ -382,20 +626,30 @@ SMODS.Joker{
     loc_txt = {
         name = "Soul Candle",
         text = {
-            "Gives {C:chips}+10{} Chips for",
+            "Gives {C:chips}+7{} Chips for",
             "every {C:purple}Hex point{} owned",
+            "{C:inactive}(Currently {}{C:chips}+#1#{}{C:inactive} Chips){}",
         }
     },
 
     atlas = "HexJokers",
-    pos = { x = 0, y = 1 },
+    pos = { x = 1, y = 0 },
     in_pool = hex_in_pool,
-    rarity = 1,
-    cost = 4,
+    rarity = 3,
+    cost = 7,
     unlocked = true,
     discovered = true,
     blueprint_compat = true,
     eternal_compat = true,
+
+    -- Shows the current live chip bonus (hex_points x 7) in the
+    -- card's own text, computed the same way calculate() below applies
+    -- it. Guards G.GAME being nil since loc_vars can also be called
+    -- from the collection screen outside of a run.
+    loc_vars = function(self, info_queue, card)
+        local hex_points = (G.GAME and G.GAME.hex_points) or big(0)
+        return { vars = { hex_points:mul(big(7)) } }
+    end,
 
     calculate = function(self, card, context)
         if context.joker_main then
@@ -403,14 +657,13 @@ SMODS.Joker{
 
             if hex_points:gt(big(0)) then
                 return {
-                    chips = hex_points:mul(big(10)),
+                    chips = hex_points:mul(big(7)),
                     colour = G.C.CHIPS,
                 }
             end
         end
     end,
 }
-
 -- Scientist: +35 Chips at the end of round if no Tarot card was used
 -- that round; using a Tarot resets the stored gain to 0 immediately.
 -- Tarot usage is detected by wrapping Card:use_consumeable (the base
@@ -583,16 +836,16 @@ SMODS.Joker{
     loc_txt = {
         name = "Encore",
         text = {
+            "retigger played",
             "{C:attention}Bonus{} and {C:attention}Mult{} cards",
-            "retrigger {C:attention}once{} more",
         }
     },
 
     atlas = "HexJokers",
-    pos = { x = 0, y = 1 },
+    pos = { x = 3, y = 1 },
     in_pool = hex_in_pool,
-    rarity = 1,
-    cost = 4,
+    rarity = 2,
+    cost = 5,
     unlocked = true,
     discovered = true,
     blueprint_compat = true,
