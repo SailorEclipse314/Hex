@@ -898,7 +898,7 @@ SMODS.Joker{
     loc_txt = {
         name = "Sharp Card",
         text = {
-            "Gives {C:chips}X4{} Chips if the",
+            "Gives {X:chips,C:white}X4{} Chips if the",
             "played hand hasn't been",
             "played yet this round",
         }
@@ -991,6 +991,75 @@ SMODS.Joker{
         end
     end,
 }
+
+
+
+SMODS.Joker{
+    key = "planetarium",
+
+    loc_txt = {
+        name = "Planetarium",
+        text = {
+            "Creates a random",
+            "{C:planet}Planet{} card every",
+            "time you {C:red}discard{}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 0, y = 1 },
+
+    rarity = 1,
+    in_pool = hex_common_in_pool,
+    cost = 5,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            last_discard_id = 0,
+        }
+    },
+
+    calculate = function(self, card, context)
+        if context.discard
+        and not context.blueprint
+        and card.ability.extra.last_discard_id ~= G.GAME.hex_discard_action_id then
+
+            card.ability.extra.last_discard_id = G.GAME.hex_discard_action_id
+
+            if G.consumeables and #G.consumeables.cards < G.consumeables.config.card_limit then
+                G.E_MANAGER:add_event(Event({
+                    trigger = "after",
+                    delay = 0.2,
+                    func = function()
+                        local new_card = SMODS.create_card({
+                            set = "Planet",
+                            area = G.consumeables,
+                        })
+
+                        G.consumeables:emplace(new_card)
+                        return true
+                    end
+                }))
+
+                return {
+                    message = "Planet",
+                    colour = G.C.SECONDARY_SET.Planet,
+                }
+            end
+        end
+    end,
+}
+
+
+
+
+
+
+
 -- Scientist: +35 Chips at the end of round if no Tarot card was used
 -- that round; using a Tarot resets the stored gain to 0 immediately.
 -- Tarot usage is detected by wrapping Card:use_consumeable (the base
@@ -2181,7 +2250,7 @@ SMODS.Joker{
     loc_txt = {
         name = "Taxes Due",
         text = {
-            "Gives {C:chips}X3{} Chips,",
+            "Gives {X:chips,C:white}X3{} Chips,",
             "but money can't",
             "go above {C:money}$25{}",
             "{C:inactive}(Destroyed if it does){}",
