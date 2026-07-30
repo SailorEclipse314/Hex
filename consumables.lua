@@ -10320,6 +10320,46 @@ G.FUNCS.hex_sacrifice = function(e)
     end
 end
 
+
+
+
+-- Refund: +$1 when a Joker is successfully hexed. Must live here, after
+-- the real G.FUNCS.hex_sacrifice definition above -- jokers.lua loads
+-- before consumables.lua (see main.lua's load order), so a hook placed
+-- there would capture nil as "old" and then get silently overwritten
+-- when consumables.lua's own assignment runs right after, which is
+-- exactly why it wasn't firing.
+local hex_old_hex_sacrifice_refund = G.FUNCS.hex_sacrifice
+
+G.FUNCS.hex_sacrifice = function(e)
+    local card = e.config.ref_table
+    local was_already_hexed = card and card.hex_being_hexed
+
+    hex_old_hex_sacrifice_refund(e)
+
+    if card and card.hex_being_hexed and not was_already_hexed then
+        if G.jokers and G.jokers.cards then
+            for _, j in ipairs(G.jokers.cards) do
+                if j.config and j.config.center
+                and j.config.center.key == ("j_" .. mod.prefix .. "_refund") then
+
+                    ease_dollars(1)
+
+                    card_eval_status_text(j, "extra", nil, nil, nil, {
+                        message = "+$1",
+                        colour = G.C.MONEY,
+                    })
+                end
+            end
+        end
+    end
+end
+
+
+
+
+
+
 local old_use_and_sell_buttons = G.UIDEF.use_and_sell_buttons
 
 function G.UIDEF.use_and_sell_buttons(card)

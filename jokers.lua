@@ -1377,7 +1377,7 @@ SMODS.Joker{
     unlocked = true,
     discovered = true,
     blueprint_compat = true,
-    eternal_compat = true,
+    eternal_compat = false,
 
     config = {
         extra = {
@@ -2277,6 +2277,83 @@ SMODS.Joker{
         end
     end,
 }
+
+
+-- 9 Lives: +1 Hex point for every 9 scored. Same rank-check pattern as
+-- Hatsune Miku/Miner above, applied to G.GAME.hex_points directly
+-- (the same way Totem/9 Lives-style hex-point jokers mutate it) instead
+-- of a joker stat.
+SMODS.Joker{
+    key = "nine_lives",
+
+    loc_txt = {
+        name = "9 Lives",
+        text = {
+            "Gives {C:purple}+1{} {C:purple}Hex point{}",
+            "for every {C:attention}9{} that is scored",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 5, y = 0 },
+
+    rarity = 3,
+    cost = 8,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    calculate = function(self, card, context)
+        if context.individual
+        and context.cardarea == G.play
+        and not context.blueprint
+        and context.other_card.base
+        and context.other_card.base.value == "9" then
+
+            G.GAME.hex_points = (G.GAME.hex_points or big(0)):add(big(1))
+
+            return {
+                message = "+1 Hex",
+                colour = G.C.HEX_ORPLE,
+            }
+        end
+    end,
+}
+
+-- Refund: +$1 when a Joker is successfully hexed. Hooks
+-- G.FUNCS.hex_sacrifice directly (calculate() has no context flag for
+-- this custom mechanic) and checks that card.hex_being_hexed newly
+-- became true as a result of the call, since hex_sacrifice's own
+-- guards (Eternal, the Absolute joker, already-mid-hex) mean not every
+-- call actually succeeds.
+
+SMODS.Joker{
+    key = "refund",
+
+    loc_txt = {
+        name = "Refund",
+        text = {
+            "Gives {C:money}+$1{} when",
+            "{C:purple}hexing{} a Joker",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 5, y = 0 },
+
+    rarity = 2,
+    cost = 5,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false,
+    eternal_compat = true,
+}
+
+
+
+
+
 
 
 SMODS.Joker{
