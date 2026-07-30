@@ -9391,6 +9391,7 @@ end
 
 HEX_ENTROPY_EXTRA_SUBFIELDS_BY_KEY = {
     ["j_stuntman"] = { chip_mod = true },   -- static +250 Chips
+    ["j_hex_dead_weight"] = { mult_per_card = true },
 }
 
 -- The reverse: nested fields that DO match a scoring/money pattern but
