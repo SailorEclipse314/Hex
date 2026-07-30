@@ -1104,6 +1104,56 @@ G.FUNCS.discard_cards_from_highlighted = function(e)
 end
 
 
+SMODS.Joker{
+    key = "compound_interest",
+
+    loc_txt = {
+        name = "Compound Interest",
+        text = {
+            "Gives an extra {C:money}+$1{} when",
+            "at the end of a",
+            "Blind for every {C:purple}2{} {C:purple}Hex points{}",
+            "{C:inactive}(Currently {}{C:money}+$#1#{}{C:inactive}){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 1, y = 0 },
+    in_pool = hex_in_pool,
+    rarity = 3,
+    cost = 8,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    loc_vars = function(self, info_queue, card)
+        local hex_points = (G.GAME and G.GAME.hex_points) or big(0)
+        local bonus = hex_points:div(big(2)):floor()
+
+        return { vars = { hex_to_plain_number(bonus) } }
+    end,
+
+    -- This is what evaluate_round actually calls (G.jokers.cards[i]:
+    -- calculate_dollar_bonus()) to build the cash-out row for each
+    -- joker -- not the normal calculate() function. Returns a plain
+    -- number rather than a big() object, since evaluate_round's own
+    -- handling (dollars:add(big(type(ret)=="number" and ret or
+    -- ret.dollars or 0))) only safely handles a plain number or a
+    -- {dollars = <plain number>} table here, not a raw big object.
+    calc_dollar_bonus = function(self)
+        local hex_points = (G.GAME and G.GAME.hex_points) or big(0)
+        local bonus = hex_points:div(big(2)):floor()
+
+        if bonus:gt(big(0)) then
+            return hex_to_plain_number(bonus)
+        end
+    end,
+}
+
+
+
+
 
 
 -- Miner: +0.1 Xchips when a Stone card is triggered. Same enhancement
@@ -1114,7 +1164,7 @@ SMODS.Joker{
     key = "miner",
 
     loc_txt = {
-        name = "Miner",
+        name = "Steve the Minor",
         text = {
             "This Joker gains {X:chips,C:white}X#1#{} Chips",
             "when a {C:attention}Stone{} card is triggered",
@@ -1123,7 +1173,7 @@ SMODS.Joker{
     },
 
     atlas = "HexJokers",
-    pos = { x = 3, y = 1 },
+    pos = { x = 4, y = 1 },
     in_pool = hex_in_pool,
 
     rarity = 2,
@@ -1166,6 +1216,71 @@ SMODS.Joker{
         end
     end,
 }
+
+SMODS.Joker{
+    key = "organ_harvesting",
+
+    loc_txt = {
+        name = "Organ Harvesting",
+        text = {
+            "Gains {X:mult,C:white}X0.1{} Mult and",
+            "{X:chips,C:white}X0.1{} Chips when",
+            "{C:attention}selling{} a Joker",
+            "{C:inactive}(Currently {}{X:mult,C:white}X#1#{}{C:inactive} Mult){}",
+            "{C:inactive}{}{X:chips,C:white}X#2#{}{C:inactive} Chips){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 1, y = 0 },
+    in_pool = hex_in_pool,
+
+    rarity = 3,
+    cost = 8,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            Xmult = big(1),
+            Xmult_gain = big(0.1),
+            xchips = big(1),
+            xchips_gain = big(0.1),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.Xmult, card.ability.extra.xchips } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            return {
+                Xmult = card.ability.extra.Xmult,
+                x_chips = card.ability.extra.xchips,
+            }
+        end
+
+        -- Same context.selling_card + context.card.ability.set == "Joker"
+        -- check your own trash_bin joker above uses, just without its
+        -- rarity == 3 restriction since this should fire on any Joker sold.
+        if context.selling_card
+        and context.card.ability
+        and context.card.ability.set == "Joker" then
+
+            card.ability.extra.Xmult = card.ability.extra.Xmult:add(card.ability.extra.Xmult_gain)
+            card.ability.extra.xchips = card.ability.extra.xchips:add(card.ability.extra.xchips_gain)
+
+            return {
+                message = localize("k_upgrade_ex"),
+                colour = G.C.MULT,
+            }
+        end
+    end,
+}
+
 
 -- Cake: X3 Chips, decreasing by 0.25 every shop reroll. Uses
 -- context.reroll_shop -- a documented flag used by vanilla's own Flash
@@ -1911,6 +2026,7 @@ SMODS.Joker{
 
     atlas = "HexJokers",
     pos = { x = 1, y = 0 },
+    in_pool = hex_in_pool,
 
     rarity = 3,
     cost = 8,
@@ -2017,23 +2133,20 @@ SMODS.Joker{
 }
 
 
-
-
--- ease_dollars is this mod's own full replacement for the vanilla
--- dollar-modification function (every dollar change in the game routes
--- through it), so it's the one reliable place to catch "money went
--- above $25" regardless of what caused the change. Captures mod.prefix
--- into its own variable up front since ease_dollars's own parameter is
--- also named "mod" -- referencing mod.prefix inside the hook body would
--- silently shadow the SMODS mod object with the dollar amount instead.
+-- Checks the live balance every frame instead of hooking a specific
+-- money-modifying function. ease_dollars turned out not to be the only
+-- path money can change through -- the round-eval cash-out payout
+-- doesn't route through it -- so rather than chase down every possible
+-- source of a dollar change, this just polls G.GAME.dollars directly,
+-- the same way Wall Clock's timer already hooks Game:update above.
 local hex_taxes_due_prefix = mod.prefix
-local hex_old_ease_dollars = ease_dollars
+local hex_old_update_taxes_due = Game.update
 
-function ease_dollars(mod, instant)
-    hex_old_ease_dollars(mod, instant)
+function Game:update(dt)
+    hex_old_update_taxes_due(self, dt)
 
-    if G.jokers and G.jokers.cards then
-        local dollars = to_big(G.GAME.dollars or 0)
+    if G.jokers and G.jokers.cards and G.GAME and G.GAME.dollars then
+        local dollars = to_big(G.GAME.dollars)
 
         if dollars:gt(big(25)) then
             for _, j in ipairs(G.jokers.cards) do
