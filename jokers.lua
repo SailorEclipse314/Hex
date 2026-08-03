@@ -58,11 +58,11 @@ SMODS.Joker{
     unlocked = true,
     discovered = true,
     blueprint_compat = true,
-    eternal_compat = true,
+    eternal_compat = false,
 
     config = {
         extra = {
-            dollars = 6,
+            dollars = big(6),
         }
     },
 
@@ -79,7 +79,7 @@ SMODS.Joker{
         end
 
         if context.after and not context.blueprint then
-            card.ability.extra.dollars = math.max(0, card.ability.extra.dollars - 1)
+            card.ability.extra.dollars = big(0):max(card.ability.extra.dollars:sub(1))
 
             if card.ability.extra.dollars <= 0 then
                 G.E_MANAGER:add_event(Event({
@@ -123,8 +123,8 @@ SMODS.Joker{
 
     config = {
         extra = {
-            mult = 0,
-            mult_gain = 2,
+            mult = big(0),
+            mult_gain = big(2),
         }
     },
 
@@ -144,7 +144,7 @@ SMODS.Joker{
         and card.hex_snowball_last_round ~= G.GAME.round then
 
             card.hex_snowball_last_round = G.GAME.round
-            card.ability.extra.mult = card.ability.extra.mult + card.ability.extra.mult_gain
+            card.ability.extra.mult = card.ability.extra.mult:add(card.ability.extra.mult_gain)
 
             return {
                 message = localize("k_upgrade_ex"),
@@ -187,7 +187,7 @@ SMODS.Joker{
 
     config = {
         extra = {
-            x_chips = 3
+            x_chips = big(3)
         }
     },
 
@@ -234,7 +234,7 @@ SMODS.Joker{
    
     config = {
         extra = {
-            x_mult = 6.66
+            x_mult = big(6.66)
         }
     },
 
@@ -300,7 +300,7 @@ SMODS.Joker{
 
     config = {
         extra = {
-            chips = 69
+            chips = big(69)
         }
     },
 
@@ -345,7 +345,7 @@ SMODS.Joker{
 
     config = {
         extra = {
-            mult = 10
+            mult = big(10)
         }
     },
 
@@ -388,7 +388,7 @@ SMODS.Joker{
 
     config = {
         extra = {
-            mult = 10
+            mult = big(10)
         }
     },
 
@@ -467,6 +467,94 @@ SMODS.Joker{
     end,
 }
 
+
+
+
+
+
+
+
+-- Summoning: while owned, The Soul (c_soul) and this mod's own Heart
+-- card (c_<prefix>_heart) are 3 times more likely to appear in Arcana/
+-- Spectral packs. Multiplies each center's own soul_rate field directly
+-- -- the same field Legendary Soul/Mythic Heart vouchers and the Quasar
+-- consumable already multiply elsewhere in this mod (see HEX_SOUL_
+-- CENTER_KEY/HEX_HEART_CENTER_KEY, defined in content.lua) -- rather
+-- than touching any global probability table.
+--
+-- Unlike the vouchers/consumable (which multiply permanently, once),
+-- this Joker's bonus needs to turn off if it's sold, and multiple
+-- copies need to stack multiplicatively (3x, 9x, 27x, ...) rather than
+-- additively. add_to_deck/remove_from_deck -- the same lifecycle pair
+-- Open Market/Endless Abyss use elsewhere in this file -- multiplies
+-- soul_rate by 3 on the way in and divides it back by 3 on the way out,
+-- so selling a copy cleanly undoes exactly what that copy added, no
+-- matter how many other copies (or the permanent voucher/consumable
+-- bonuses) are also currently multiplying the same field.
+local function hex_summoning_soul_heart_centers()
+    return G.P_CENTERS[HEX_SOUL_CENTER_KEY], G.P_CENTERS[HEX_HEART_CENTER_KEY]
+end
+
+SMODS.Joker{
+    key = "summoning",
+
+    loc_txt = {
+        name = "Summoning",
+        text = {
+            "{C:attention}X3{} the chance for",
+            "{C:legendary}The Soul{} and {C:mythic}Heart{}",
+            "to appear in {C:tarot}Arcana{} and",
+            "{C:spectral}Spectral{} packs",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 1, y = 0 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 3,             -- rare
+    cost = 8,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false, -- the effect lives in the lifecycle hooks below, not in calculate, so a Blueprint copy has nothing to mimic
+    eternal_compat = true,
+
+    add_to_deck = function(self, card, from_debuff)
+        local soul_center, heart_center = hex_summoning_soul_heart_centers()
+
+        if soul_center and soul_center.soul_rate then
+            soul_center.soul_rate = soul_center.soul_rate * 3
+        end
+
+        if heart_center and heart_center.soul_rate then
+            heart_center.soul_rate = heart_center.soul_rate * 3
+        end
+    end,
+
+    remove_from_deck = function(self, card, from_debuff)
+        local soul_center, heart_center = hex_summoning_soul_heart_centers()
+
+        if soul_center and soul_center.soul_rate then
+            soul_center.soul_rate = soul_center.soul_rate / 3
+        end
+
+        if heart_center and heart_center.soul_rate then
+            heart_center.soul_rate = heart_center.soul_rate / 3
+        end
+    end,
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 SMODS.Joker{
     key = "hatsune_miku",
 
@@ -492,8 +580,8 @@ SMODS.Joker{
 
     config = {
         extra = {
-            chips = 0,
-            chips_gain = 15,
+            chips = big(0),
+            chips_gain = big(15),
         }
     },
 
@@ -514,7 +602,7 @@ SMODS.Joker{
             local rank = context.other_card.base and context.other_card.base.value
 
             if rank == "3" or rank == "9" then
-                card.ability.extra.chips = card.ability.extra.chips + card.ability.extra.chips_gain
+                card.ability.extra.chips = card.ability.extra.chips:add(card.ability.extra.chips_gain)
 
                 return {
                     message = localize("k_upgrade_ex"),
@@ -593,6 +681,149 @@ SMODS.Joker{
     end,
 }
 
+
+
+
+-- Counts every playing card in the whole deck (hand/deck-pile/discard/
+-- play, anywhere -- using G.playing_cards, the same master registry
+-- Diamond Card's own hex_count_diamond_cards helper uses elsewhere in
+-- this file) that currently carries ANY Seal (Red/Blue/Gold/Purple, or
+-- any custom seal this mod or another adds, like Orange/Green/Pink/
+-- Black above) -- just checked via the plain c.seal field being
+-- non-nil, not any specific seal key.
+function hex_count_sealed_cards()
+    if not G.playing_cards then return 0 end
+
+    local count = 0
+    for _, c in ipairs(G.playing_cards) do
+        if c.seal then
+            count = count + 1
+        end
+    end
+
+    return count
+end
+
+SMODS.Joker{
+    key = "stamp_collection",
+
+    loc_txt = {
+        name = "Stamp Collection",
+        text = {
+            "Gives {X:mult,C:white}X#1#{} Mult for every",
+            "playing card with a {C:attention}Seal{}",
+            "in your {C:attention}full deck{}",
+            "{C:inactive}(Currently {}{X:mult,C:white}X#2#{}{C:inactive} Mult){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 1 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 2,             -- uncommon
+    cost = 7,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            Xmult_gain = big(0.25),
+        }
+    },
+
+    -- Live, fully dynamic -- same "derived from current deck state every
+    -- time it's read" approach Juno/Andromeda-style Jokers elsewhere in
+    -- this file use, rather than a permanent stacking counter. Rises and
+    -- falls immediately as sealed cards are added/removed/stripped.
+    loc_vars = function(self, info_queue, card)
+        local count = hex_count_sealed_cards()
+        local xmult = big(1):add(card.ability.extra.Xmult_gain:mul(big(count)))
+
+        return { vars = { card.ability.extra.Xmult_gain, xmult } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            local count = hex_count_sealed_cards()
+            local xmult = big(1):add(card.ability.extra.Xmult_gain:mul(big(count)))
+
+            return {
+                Xmult = xmult,
+                colour = G.C.MULT,
+            }
+        end
+    end,
+}
+
+
+
+
+
+SMODS.Joker{
+    key = "pokemon_card",
+
+    loc_txt = {
+        name = "Pokémon Card",
+        text = {
+            "Each {C:attention}Common{} Joker you have",
+            "gives {X:chips,C:white}X#1#{} Chips",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 1, y = 0 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 3,             -- rare
+    cost = 8,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            per_common_x_chips = big(1.75),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.per_common_x_chips } }
+    end,
+
+    -- Mirrors vanilla Baseball Card's own real mechanic exactly: fires
+    -- once per OTHER owned Joker via context.other_joker (not once for
+    -- this card's own joker_main), checking THAT joker's rarity, and
+    -- returning Xchip_mod -- the per-other-joker Chips-multiplier key,
+    -- parallel to Xmult_mod -- so each qualifying Joker gets its own
+    -- juice_up and its own multiplicative application, in Joker-row
+    -- order, rather than one lump sum applied from Pokémon Card's own
+    -- position.
+    calculate = function(self, card, context)
+        if context.other_joker
+        and context.other_joker.config.center.rarity == 1
+        and card ~= context.other_joker then
+
+            G.E_MANAGER:add_event(Event({
+                func = function()
+                    context.other_joker:juice_up(0.5, 0.5)
+                    return true
+                end
+            }))
+
+            return {
+                message = "X" .. tostring(card.ability.extra.per_common_x_chips),
+                Xchip_mod = card.ability.extra.per_common_x_chips,
+                colour = G.C.CHIPS,
+            }
+        end
+    end,
+}
+
+
+
+
 -- Reverb: retriggers Aces, 10s, 9s, 8s, 7s, and 6s. Same
 -- context.repetition + context.cardarea == G.play shape as Encore
 -- above, gated on rank instead of enhancement key.
@@ -654,10 +885,10 @@ SMODS.Joker{
     },
 
     atlas = "HexJokers",
-    pos = { x = 0, y = 1 },
+    pos = { x = 3, y = 1 },
     in_pool = hex_in_pool,
-    rarity = 1,
-    cost = 4,
+    rarity = 2,
+    cost = 7,
     unlocked = true,
     discovered = true,
     blueprint_compat = false,
@@ -851,7 +1082,7 @@ SMODS.Joker{
 
     config = {
         extra = {
-            money = 5,
+            money = big(5),
         }
     },
 
@@ -895,12 +1126,12 @@ SMODS.Joker{
 
     config = {
         extra = {
-            chips = 50,
+            chips = big(50),
         }
     },
 
     loc_vars = function(self, info_queue, card)
-        return { vars = { card.ability.extra.chip } }
+        return { vars = { card.ability.extra.chips } }
     end,
 
 
@@ -910,7 +1141,7 @@ SMODS.Joker{
 
             if used > 0 then
                 return {
-                    chips = used * card.ability.extra.chip,
+                    chips = big(used):mul(card.ability.extra.chips),
                     colour = G.C.CHIPS,
                 }
             end
@@ -942,7 +1173,7 @@ SMODS.Joker{
     cost = 5,
     unlocked = true,
     discovered = true,
-    blueprint_compat = true,
+    blueprint_compat = false,
     eternal_compat = true,
 
 
@@ -959,6 +1190,132 @@ SMODS.Joker{
                 dollars = -5,
                 colour = G.C.MONEY,
             }
+        end
+    end,
+}
+
+
+SMODS.Joker{
+    key = "open_market",
+
+    loc_txt = {
+        name = "Open Market",
+        text = {
+            "Gives {C:attention}+1{} shop slot",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 1, y = 0 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 3,             -- rare
+    cost = 8,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false,
+    eternal_compat = true,
+
+    -- Same add_to_deck/remove_from_deck lifecycle pair Endless Abyss
+    -- uses elsewhere in this file for its own persistent Joker-slot
+    -- bonus -- applied exactly once no matter how the card enters/
+    -- leaves your Jokers (bought, created via Life/Manifest-style
+    -- summon, sold, destroyed, etc.), rather than needing a per-frame
+    -- poll. G.GAME.shop.joker_max is the same field Overstock Deck's
+    -- own apply() hook bumps directly for its +2 shop slot bonus.
+    add_to_deck = function(self, card, from_debuff)
+        G.GAME.shop.joker_max = (G.GAME.shop.joker_max or 0) + 1
+    end,
+
+    remove_from_deck = function(self, card, from_debuff)
+        G.GAME.shop.joker_max = (G.GAME.shop.joker_max or 0) - 1
+    end,
+}
+
+
+SMODS.Joker{
+    key = "russian_roulette",
+
+    loc_txt = {
+        name = "Russian Roulette",
+        text = {
+            "Gives {X:mult,C:white}X#1#{} Mult",
+            "At the start of a {C:attention}Boss Blind{},",
+            "{C:green}#2# in 6{} chance to destroy",
+            "all other Jokers",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 1 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 2,             -- uncommon
+    cost = 6,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            Xmult = big(3),
+            last_round = nil,
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        local prob_mod = (G.GAME and G.GAME.probabilities and G.GAME.probabilities.normal) or 1
+        return { vars = { card.ability.extra.Xmult, prob_mod } }
+    end,
+
+    calculate = function(self, card, context)
+        -- Always applies, every hand, unconditionally.
+        if context.joker_main then
+            return {
+                Xmult = card.ability.extra.Xmult,
+                colour = G.C.MULT,
+            }
+        end
+
+        -- Rolled exactly once per Boss Blind (deduped via last_round,
+        -- same per-card round-stamp technique Overflow/Totem use
+        -- elsewhere in this file) -- and can roll again on every future
+        -- Boss Blind, not just the first one encountered.
+        if context.first_hand_drawn
+        and G.GAME.blind
+        and G.GAME.blind.boss
+        and not context.blueprint
+        and card.ability.extra.last_round ~= G.GAME.round then
+
+            card.ability.extra.last_round = G.GAME.round
+
+            local prob_mod = (G.GAME and G.GAME.probabilities and G.GAME.probabilities.normal) or 1
+            local chance = math.min(1, (1 / 6) * prob_mod)
+
+            if pseudorandom(pseudoseed(mod.prefix .. "_russian_roulette")) < chance then
+                -- Destroys every other eligible Joker -- reuses
+                -- hex_huge_lqg_eligible_jokers so Eternal and Immortal
+                -- Jokers are protected, same as Andromeda/Exile's own
+                -- destroy effects elsewhere in this file.
+                local eligible = hex_huge_lqg_eligible_jokers()
+
+                for _, j in ipairs(eligible) do
+                    if j ~= card then
+                        G.E_MANAGER:add_event(Event({
+                            trigger = "after",
+                            delay = 0.1,
+                            func = function()
+                                j:start_dissolve()
+                                return true
+                            end
+                        }))
+                    end
+                end
+
+                return {
+                    message = "BANG!",
+                    colour = G.C.RED,
+                }
+            end
         end
     end,
 }
@@ -996,7 +1353,7 @@ SMODS.Joker{
 
     config = {
         extra = {
-            x_chips = 4,
+            x_chips = big(4),
         }
     },
 
@@ -1033,6 +1390,209 @@ SMODS.Joker{
         end
     end,
 }
+
+
+
+SMODS.Joker{
+    key = "big_find",
+
+    loc_txt = {
+        name = "Big Find",
+        text = {
+            "Booster Packs have",
+            "{C:attention}+1{} more option",
+            "{C:inactive}(Stacks with multiple copies{}",
+            "{C:inactive}and other ways to get{}",
+            "{C:inactive}more options){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 1, y = 0 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 3,             -- rare
+    cost = 8,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false, -- the effect lives in the lifecycle hooks below, feeding the same shared G.GAME.hex_bigbox_bonus pool Big Box voucher/Card:open already read from
+    eternal_compat = true,
+
+    -- Feeds directly into the same G.GAME.hex_bigbox_bonus counter Big
+    -- Box voucher bumps elsewhere in this file -- that field is already
+    -- summed together with Wormhole's own bonus inside the Card:open
+    -- wrap and applied to every Booster pack opened (Arcana, Celestial,
+    -- Spectral, Standard, Buffoon, and this mod's own Star/Galaxy packs
+    -- alike), so no separate wrap is needed here. Same add_to_deck/
+    -- remove_from_deck lifecycle pair Open Market/Endless Abyss use
+    -- elsewhere in this file -- applied exactly once no matter how the
+    -- card enters/leaves your Jokers, and naturally stacks with itself
+    -- since each copy bumps the shared pool independently.
+    add_to_deck = function(self, card, from_debuff)
+        G.GAME.hex_bigbox_bonus = (G.GAME.hex_bigbox_bonus or 0) + 1
+    end,
+
+    remove_from_deck = function(self, card, from_debuff)
+        G.GAME.hex_bigbox_bonus = (G.GAME.hex_bigbox_bonus or 0) - 1
+    end,
+}
+
+
+
+SMODS.Joker{
+    key = "middle_finger",
+
+    loc_txt = {
+        name = "Middle Finger",
+        text = {
+            "If played hand contains a",
+            "{C:attention}Straight{}, retriggers the",
+            "{C:attention}middle{} card {C:attention}5{} extra times,",
+            "but {C:red}no other cards score{}",
+        }
+    },
+
+    config = {
+        extra = {
+            retriggers = 5,
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 0, y = 1 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 1,              -- common
+    cost = 4,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.retriggers } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.before then
+            card.ability.extra.middle_card = nil
+            card.ability.extra.debuffed = nil
+
+            local groups = context.poker_hands and context.poker_hands["Straight"]
+
+            -- G.play.cards is the actual left-to-right position the
+            -- player arranged before playing -- context.poker_hands'
+            -- group list is built for hand-TYPE detection and isn't
+            -- guaranteed to preserve that order, so for "3rd card as
+            -- arranged" specifically, G.play.cards is the one to trust.
+            if groups and #G.play.cards == 5 then
+                local middle = G.play.cards[3]
+                card.ability.extra.middle_card = middle
+                card.ability.extra.debuffed = {}
+
+                for _, c in ipairs(G.play.cards) do
+                    if c ~= middle then
+                        if SMODS.debuff_card then
+                            SMODS.debuff_card(c, true, "hex_middle_finger")
+                        elseif c.set_debuff then
+                            c:set_debuff(true)
+                        else
+                            c.debuff = true
+                        end
+                        table.insert(card.ability.extra.debuffed, c)
+                    end
+                end
+            end
+
+            return
+        end
+
+        if context.after then
+            if card.ability.extra.debuffed then
+                for _, c in ipairs(card.ability.extra.debuffed) do
+                    if SMODS.debuff_card then
+                        SMODS.debuff_card(c, false, "hex_middle_finger")
+                    elseif c.set_debuff then
+                        c:set_debuff(false)
+                    else
+                        c.debuff = nil
+                    end
+                end
+            end
+
+            card.ability.extra.middle_card = nil
+            card.ability.extra.debuffed = nil
+            return
+        end
+
+        if context.repetition and context.cardarea == G.play and not context.blueprint then
+            if context.other_card == card.ability.extra.middle_card then
+                return {
+                    message = localize("k_again_ex"),
+                    repetitions = card.ability.extra.retriggers,
+                    card = context.other_card,
+                }
+            end
+        end
+    end,
+}
+
+
+SMODS.Joker{
+    key = "infestation",
+
+    loc_txt = {
+        name = "Infestation",
+        text = {
+            "Gives {C:purple}+1{} {C:purple}Hex point{}",
+            "at the {C:attention}end of round{}",
+            "Gain {C:purple}+1{} more per {C:attention}10{}",
+            "Jokers {C:purple}hexed{} since owning this",
+            "{C:inactive}(Currently {}+#1#{C:inactive} Hex points){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 1, y = 0 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 3,             -- rare
+    cost = 8,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false, -- the counter lives on this specific card, and the increment hook targets Infestation by key -- a Blueprint copy wouldn't track its own count
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            hexed_count = big(0),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        local count = card.ability.extra.hexed_count or big(0)
+        local gain = big(1):add(count:div(big(10)):floor())
+
+        return { vars = { gain } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.end_of_round
+        and not context.blueprint
+        and card.hex_infestation_last_round ~= G.GAME.round then
+
+            card.hex_infestation_last_round = G.GAME.round
+
+            local count = card.ability.extra.hexed_count or big(0)
+            local gain = big(1):add(count:div(big(10)):floor())
+
+            G.GAME.hex_points = (G.GAME.hex_points or big(0)):add(gain)
+
+            return {
+                message = "+" .. tostring(gain) .. " Hex",
+                colour = G.C.HEX_ORPLE,
+            }
+        end
+    end,
+}
+
 
 -- Soul Candle: +7 Chips for every Hex point currently owned. Hex
 -- points are an OmegaNum (big()) value in this mod, so the multiply
@@ -1100,7 +1660,7 @@ SMODS.Joker{
     pos = { x = 0, y = 1 },
 
     rarity = 1,
-    in_pool = hex_common_in_pool,
+    in_pool = hex_in_pool,
     cost = 5,
     unlocked = true,
     discovered = true,
@@ -1187,8 +1747,8 @@ SMODS.Joker{
 
     config = {
         extra = {
-            chips = 0,
-            chips_gain = 35
+            chips = big(0),
+            chips_gain = big(35)
         }
     },
 
@@ -1210,13 +1770,13 @@ SMODS.Joker{
             card.hex_scientist_last_round = G.GAME.round
 
             if not G.GAME.hex_scientist_tarot_used_this_round then
-                card.ability.extra.chips = card.ability.extra.chips + card.ability.extra.chips_gain
+                card.ability.extra.chips = card.ability.extra.chips:add(card.ability.extra.chips_gain)
 
                 return {
                     message = localize("k_upgrade_ex"),
                     colour = G.C.CHIPS,
                 }
-            end
+            end 
 
             -- reset the flag for next round regardless of which branch fired
             G.GAME.hex_scientist_tarot_used_this_round = false
@@ -1238,7 +1798,7 @@ function Card:use_consumeable(area, copier)
             for _, j in ipairs(G.jokers.cards) do
                 if j.config and j.config.center
                 and j.config.center.key == ("j_" .. mod.prefix .. "_scientist") then
-                    j.ability.extra.chips = 0
+                    j.ability.extra.chips = big(0)
                 end
             end
         end
@@ -1256,12 +1816,456 @@ end
 -- approach the can_play/can_discard overrides above already use.
 local hex_old_discard_from_highlighted = G.FUNCS.discard_cards_from_highlighted
 
-G.FUNCS.discard_cards_from_highlighted = function(e)
+G.FUNCS.discard_cards_from_highlighted = function(e, ...)
     G.GAME.hex_last_discard_count = (G.hand and G.hand.highlighted and #G.hand.highlighted) or 0
     G.GAME.hex_discard_action_id = (G.GAME.hex_discard_action_id or 0) + 1
 
-    return hex_old_discard_from_highlighted(e)
+    return hex_old_discard_from_highlighted(e, ...)
 end
+
+
+
+
+
+-- Baguette: starts at +10 Mult / +70 Chips, loses 2 Mult and 14 Chips at
+-- the end of every round (5 rounds of decay brings both to exactly 0),
+-- then destroys itself. Deduped with the same context.end_of_round +
+-- per-card round-stamp technique Winning Streak uses elsewhere in this
+-- file, so this only decays once per round even with retriggers/multiple
+-- end-of-round passes.
+SMODS.Joker{
+    key = "baguette",
+
+    loc_txt = {
+        name = "Baguette",
+        text = {
+            "Gives {C:mult}+#1#{} Mult and",
+            "{C:chips}+#2#{} Chips",
+            "Loses {C:mult}2{} Mult and",
+            "{C:chips}14{} Chips every round",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 0, y = 1 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 1,             -- common
+    cost = 4,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            mult = big(10),
+            chips = big(70),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.mult, card.ability.extra.chips } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            return {
+                mult = card.ability.extra.mult,
+                chips = card.ability.extra.chips,
+            }
+        end
+
+        if context.end_of_round
+        and not context.blueprint
+        and card.hex_baguette_last_round ~= G.GAME.round then
+
+            card.hex_baguette_last_round = G.GAME.round
+
+            card.ability.extra.mult = card.ability.extra.mult:sub(big(2))
+            if card.ability.extra.mult:lt(big(0)) then
+                card.ability.extra.mult = big(0)
+            end
+
+            card.ability.extra.chips = card.ability.extra.chips:sub(big(14))
+            if card.ability.extra.chips:lt(big(0)) then
+                card.ability.extra.chips = big(0)
+            end
+
+            if card.ability.extra.mult:eq(big(0)) and card.ability.extra.chips:eq(big(0)) then
+                -- Tracked globally, not on this card -- so Kasane Teto's
+                -- own count stays correct even if it's picked up after
+                -- this Baguette (or several) already burned out, the
+                -- same "global run counter, read by whoever cares" shape
+                -- G.GAME.hex_points uses elsewhere in this file.
+                G.GAME.hex_baguette_destroyed = (G.GAME.hex_baguette_destroyed or 0) + 1
+
+                G.E_MANAGER:add_event(Event({
+                    trigger = "after",
+                    delay = 0.3,
+                    func = function()
+                        card:start_dissolve()
+                        return true
+                    end
+                }))
+
+                return {
+                    message = "Destroyed!",
+                    colour = G.C.RED,
+                }
+            end
+
+            return {
+                message = "-2/14",
+                colour = G.C.RED,
+            }
+        end
+    end,
+}
+
+-- Kasane Teto: +30 Mult for every Baguette destroyed this run so far,
+-- computed live off G.GAME.hex_baguette_destroyed (Baguette's own global
+-- counter above) rather than an incrementally-grown local stat -- so the
+-- total is correct regardless of when Kasane Teto was bought relative to
+-- any Baguette's destruction.
+SMODS.Joker{
+    key = "kasane_teto",
+
+    loc_txt = {
+        name = "Kasane Teto",
+        text = {
+            "Gains {C:mult}+#2#{} Mult for every",
+            "{C:attention}Baguette{} destroyed this run",
+            "{C:inactive}(Currently {}{C:mult}+#1#{}{C:inactive} Mult){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 0, y = 2 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 2,             -- uncommon
+    cost = 6,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            mult_per_baguette = big(30),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        local destroyed = (G.GAME and G.GAME.hex_baguette_destroyed) or 0
+        local current_mult = card.ability.extra.mult_per_baguette:mul(big(destroyed))
+
+        return { vars = { current_mult, card.ability.extra.mult_per_baguette } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            local destroyed = (G.GAME and G.GAME.hex_baguette_destroyed) or 0
+
+            if destroyed > 0 then
+                return {
+                    mult = card.ability.extra.mult_per_baguette:mul(big(destroyed)),
+                    colour = G.C.MULT,
+                }
+            end
+        end
+    end,
+}
+
+
+
+SMODS.Joker{
+    key = "gambler_joker",
+
+    loc_txt = {
+        name = "Gambler Joker",
+        text = {
+            "When this Joker is sold,",
+            "{C:green}#1# in 5{} chance to create",
+            "a random {C:legendary,E:1}Legendary{} Joker",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 1, y = 0 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 3,             -- rare
+    cost = 8,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false,
+    eternal_compat = true,
+
+    -- Same "X in 5" display convention Sadprint uses -- prob_mod is
+    -- G.GAME.probabilities.normal, the same global multiplier Oops! All
+    -- 6s doubles (and stacks further with multiple copies), so the
+    -- tooltip always matches the real odds rolled below.
+    loc_vars = function(self, info_queue, card)
+        local prob_mod = (G.GAME and G.GAME.probabilities and G.GAME.probabilities.normal) or 1
+        return { vars = { 1 * prob_mod } }
+    end,
+
+    calculate = function(self, card, context)
+        -- context.card is whichever Joker is actually being sold -- gated
+        -- to context.card == card so this only fires on Gambler Joker's
+        -- own sale, same pattern Sadprint uses elsewhere in this file.
+        if context.selling_card and context.card == card then
+            local prob_mod = (G.GAME and G.GAME.probabilities and G.GAME.probabilities.normal) or 1
+            local chance = math.min(1, (1 / 5) * prob_mod)
+
+            if pseudorandom(pseudoseed(mod.prefix .. "_gambler_joker")) < chance then
+                -- Pool-scan + math.random (not pseudorandom_element) since
+                -- some Legendary Jokers -- from this or other mods -- may
+                -- set in_pool = false, which pseudorandom_element would
+                -- otherwise filter out. Same Showman/uniqueness check
+                -- Andromeda's own Legendary grant uses elsewhere in this
+                -- file, so this respects "no duplicate Legendaries"
+                -- unless Showman is owned.
+                local showman_owned = hex_owns_showman()
+
+                local legendaries = {}
+                for _, center in pairs(G.P_CENTERS) do
+                    if center.set == "Joker"
+                    and center.rarity == 4
+                    and (showman_owned or #SMODS.find_card(center.key) == 0) then
+                        legendaries[#legendaries + 1] = center
+                    end
+                end
+
+                if #legendaries > 0 then
+                    local chosen = legendaries[math.random(#legendaries)]
+
+                    G.E_MANAGER:add_event(Event({
+                        trigger = "after",
+                        delay = 0.2,
+                        func = function()
+                            local new_card = SMODS.create_card({
+                                set = "Joker",
+                                key = chosen.key,
+                                area = G.jokers
+                            })
+
+                            G.jokers:emplace(new_card)
+                            new_card:add_to_deck()
+
+                            card_eval_status_text(new_card, "extra", nil, nil, nil, {
+                                message = "JACKPOT!",
+                                colour = G.C.LEGENDARY,
+                            })
+
+                            return true
+                        end
+                    }))
+                end
+            end
+        end
+    end,
+}
+
+-- Lucky Number 7: makes every Lucky-enhanced 7 always trigger its
+-- effect(s), instead of rolling the normal 1 in 5 (Mult) / 1 in 15
+-- (money) odds. Lucky Card's actual roll lives in vanilla's own
+-- Card:get_chip_mult / Card:get_p_dollars (not in a center.calculate
+-- function), so both are wrapped directly here -- for a Lucky-enhanced
+-- 7 while this Joker is owned, the success branch is taken
+-- unconditionally (mirroring vanilla's own success path exactly, just
+-- without the pseudorandom() roll gating it); everything else --
+-- non-7 Lucky cards, non-Lucky cards, Lucky 7s without this Joker
+-- owned -- falls through to the original function untouched.
+local function hex_lucky_number_7_owned()
+    if not (G.jokers and G.jokers.cards) then return false end
+
+    for _, j in ipairs(G.jokers.cards) do
+        if j.config and j.config.center
+        and j.config.center.key == ("j_" .. mod.prefix .. "_lucky_number_7") then
+            return true
+        end
+    end
+
+    return false
+end
+
+local hex_old_get_chip_mult = Card.get_chip_mult
+
+function Card:get_chip_mult()
+    if not self.debuff
+    and self.ability and self.ability.set ~= 'Joker'
+    and self.ability.effect == "Lucky Card"
+    and self.base and self.base.value == "7"
+    and hex_lucky_number_7_owned() then
+        self.lucky_trigger = true
+        return self.ability.mult
+    end
+
+    return hex_old_get_chip_mult(self)
+end
+
+local hex_old_get_p_dollars = Card.get_p_dollars
+
+function Card:get_p_dollars()
+    if not self.debuff
+    and self.ability and self.ability.effect == "Lucky Card"
+    and self.base and self.base.value == "7"
+    and hex_lucky_number_7_owned() then
+        local ret = 0
+
+        if self.seal == 'Gold' then
+            ret = ret + 3
+        end
+
+        if self.ability.p_dollars > 0 then
+            self.lucky_trigger = true
+            ret = ret + self.ability.p_dollars
+        end
+
+        if ret > 0 then 
+            G.GAME.dollar_buffer = (G.GAME.dollar_buffer or 0) + ret
+            G.E_MANAGER:add_event(Event({ func = (function() G.GAME.dollar_buffer = 0; return true end) }))
+        end
+
+        return ret
+    end
+
+    return hex_old_get_p_dollars(self)
+end
+
+SMODS.Joker{
+    key = "lucky_number_7",
+
+    loc_txt = {
+        name = "Lucky Number 7",
+        text = {
+            "{C:attention}Lucky{} {C:attention}7s{} always succeed",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 1 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 2,             -- uncommon
+    cost = 6,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false, -- the effect lives in the m_lucky wrap above, not in calculate(), so a copy wouldn't do anything extra
+    eternal_compat = true,
+}
+
+
+
+
+SMODS.Joker{
+    key = "scavenger",
+
+    loc_txt = {
+        name = "Scavenger",
+        text = {
+            "Gives a {C:attention}random Tag{}",
+            "at the {C:attention}end of round{}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 1 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 2,             -- uncommon
+    cost = 5,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    calculate = function(self, card, context)
+        -- Same per-card round-stamp dedupe technique Baguette/
+        -- Accumulation use elsewhere in this file, so this only fires
+        -- once per round even with retriggers or multiple end-of-round
+        -- passes.
+        if context.end_of_round
+        and not context.blueprint
+        and card.hex_scavenger_last_round ~= G.GAME.round then
+
+            card.hex_scavenger_last_round = G.GAME.round
+
+            -- pseudorandom_element over G.P_CENTER_POOLS.Tag -- the same
+            -- pool-table shape SMODS.Rank/SMODS.Suit use for their own
+            -- "random rank/suit respecting in_pool" pattern -- picks a
+            -- random registered Tag (vanilla or modded), then grants it
+            -- via add_tag(Tag(key)), the same API Bellatrix's own Double
+            -- Tag grant uses elsewhere in this file.
+            local pool = G.P_CENTER_POOLS.Tag
+            if pool and #pool > 0 then
+                local chosen = pseudorandom_element(pool, pseudoseed(mod.prefix .. "_scavenger"))
+                add_tag(Tag(chosen.key))
+
+                return {
+                    message = "+Tag!",
+                    colour = G.C.MULT,
+                }
+            end
+        end
+    end,
+}
+
+
+
+-- Employee Discount: -$1 to every Joker's cost (shop price AND, as a
+-- direct consequence, sell value -- same "discount affects the
+-- underlying cost field, so it reduces sell price too" behavior
+-- vanilla's own Clearance Sale/Liquidation vouchers have), floored so
+-- it can never drop below $1. Wraps Card:set_cost directly -- the same
+-- vanilla function Clearance Sale/Liquidation hook into for their own
+-- discount_percent -- rather than touching center.cost, since cost is
+-- computed fresh (editions, Inflation, other discounts) every time
+-- set_cost runs, and this needs to apply after all of that, gated
+-- strictly to card.ability.set == "Joker" so playing cards, packs, and
+-- vouchers are untouched.
+local function hex_employee_discount_owned()
+    if not (G.jokers and G.jokers.cards) then return false end
+
+    for _, j in ipairs(G.jokers.cards) do
+        if j.config and j.config.center
+        and j.config.center.key == ("j_" .. mod.prefix .. "_employee_discount") then
+            return true
+        end
+    end
+
+    return false
+end
+
+local hex_old_set_cost_employee_discount = Card.set_cost
+
+function Card:set_cost(...)
+    hex_old_set_cost_employee_discount(self, ...)
+
+    if self.ability and self.ability.set == "Joker" and hex_employee_discount_owned() then
+        self.cost = math.max(1, self.cost - 1)
+    end
+end
+
+SMODS.Joker{
+    key = "employee_discount",
+
+    loc_txt = {
+        name = "Employee Discount",
+        text = {
+            "All {C:attention}Jokers{} cost {C:money}$1{} less",
+            "{C:inactive}(Minimum $1){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 1 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 2,             -- uncommon
+    cost = 6,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false, -- the effect lives in the Card:set_cost wrap above, gated on ownership directly, not in calculate() -- a Blueprint copy wouldn't do anything extra
+    eternal_compat = true,
+}
 
 
 SMODS.Joker{
@@ -1284,7 +2288,7 @@ SMODS.Joker{
     cost = 8,
     unlocked = true,
     discovered = true,
-    blueprint_compat = true,
+    blueprint_compat = false,
     eternal_compat = true,
 
     loc_vars = function(self, info_queue, card)
@@ -1376,6 +2380,9 @@ SMODS.Joker{
         end
     end,
 }
+
+
+
 
 SMODS.Joker{
     key = "organ_harvesting",
@@ -1472,7 +2479,7 @@ SMODS.Joker{
 
     config = {
         extra = {
-            xchips = 3,
+            xchips = big(3),
         }
     },
 
@@ -1483,13 +2490,13 @@ SMODS.Joker{
     calculate = function(self, card, context)
         if context.joker_main then
             return {
-                x_chips = math.max(1, card.ability.extra.xchips),
+                x_chips = big(1):max(card.ability.extra.xchips),
                 colour = G.C.CHIPS,
             }
         end
 
         if context.reroll_shop and not context.blueprint then
-            card.ability.extra.xchips = card.ability.extra.xchips - 0.25
+            card.ability.extra.xchips = (card.ability.extra.xchips):sub(0.25)
 
             if card.ability.extra.xchips <= 1 then
                 card.ability.extra.xchips = 1
@@ -1514,9 +2521,137 @@ SMODS.Joker{
 
 
 
+SMODS.Joker{
+    key = "sadprint",
+
+    loc_txt = {
+        name = "Sadprint",
+        text = {
+            "When this Joker is sold,",
+            "{C:green}#1# in 5{} chance to create",
+            "a {C:blue}Blueprint{} Joker",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 1, y = 0 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 3,             -- rare
+    cost = 8,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false,
+    eternal_compat = true,
+
+    loc_vars = function(self, info_queue, card)
+        local prob_mod = (G.GAME and G.GAME.probabilities and G.GAME.probabilities.normal) or 1
+        return { vars = { 3 * prob_mod } }
+    end,
+
+    calculate = function(self, card, context)
+        -- context.card is whichever Joker is actually being sold (same
+        -- field Trash Bin's own sell-detection reads elsewhere in this
+        -- file) -- gated to context.card == card so this only fires on
+        -- Sadprint's own sale, not any other Joker's.
+        if context.selling_card and context.card == card then
+            local prob_mod = (G.GAME and G.GAME.probabilities and G.GAME.probabilities.normal) or 1
+            local chance = math.min(1, (3 / 5) * prob_mod)
+
+            if pseudorandom(pseudoseed(mod.prefix .. "_sadprint")) < chance then
+                G.E_MANAGER:add_event(Event({
+                    trigger = "after",
+                    delay = 0.2,
+                    func = function()
+                        local new_card = SMODS.create_card({
+                            set = "Joker",
+                            key = "j_blueprint",
+                            area = G.jokers
+                        })
+
+                        G.jokers:emplace(new_card)
+                        new_card:add_to_deck()
+
+                        card_eval_status_text(new_card, "extra", nil, nil, nil, {
+                            message = "Blueprint!",
+                            colour = G.C.BLUE,
+                        })
+
+                        return true
+                    end
+                }))
+            end
+        end
+    end,
+}
 
 
+SMODS.Joker{
+    key = "diversity",
 
+    loc_txt = {
+        name = "Diversity",
+        text = {
+            "Gives {X:mult,C:white}X#1#{} Mult if",
+            "played hand contains",
+            "{C:attention}5{} different ranks",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 1 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 2,             -- uncommon
+    cost = 6,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            Xmult = big(3),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.Xmult } }
+    end,
+
+    calculate = function(self, card, context)
+        -- Resets the tracked rank set at the start of every hand's
+        -- scoring pass -- same context.before reset timing Blackjack's
+        -- own rank-sum accumulator uses above. Guarded with
+        -- not context.blueprint so a Blueprint copy doesn't reset/
+        -- re-accumulate its own separate set.
+        if context.before and not context.blueprint then
+            card.ability.extra.ranks_seen = {}
+            card.ability.extra.rank_count = 0
+        end
+
+        -- Adds each scoring card's rank (base.value) to a set, counting
+        -- only the first time a given rank is seen this hand -- so
+        -- retriggers on the same card don't inflate the count, but two
+        -- different scoring cards that happen to share a rank correctly
+        -- only count once between them.
+        if context.individual and context.cardarea == G.play and not context.blueprint then
+            local rank = context.other_card.base and context.other_card.base.value
+
+            if rank and card.ability.extra.ranks_seen and not card.ability.extra.ranks_seen[rank] then
+                card.ability.extra.ranks_seen[rank] = true
+                card.ability.extra.rank_count = (card.ability.extra.rank_count or 0) + 1
+            end
+        end
+
+        -- By the time joker_main fires, every scoring card for this
+        -- hand has already been counted above.
+        if context.joker_main and (card.ability.extra.rank_count or 0) >= 5 then
+            return {
+                Xmult = card.ability.extra.Xmult,
+                colour = G.C.MULT,
+            }
+        end
+    end,
+}
 
 -- Bartender: $3 when you discard exactly one card. Fires at most once
 -- per discard action (dedupe via hex_discard_action_id, stamped per
@@ -1547,7 +2682,7 @@ SMODS.Joker{
     config = {
         extra = {
             last_discard_id = 0,
-            money = 3,
+            money = big(3),
         }
     },
 
@@ -1570,6 +2705,1022 @@ SMODS.Joker{
         end
     end,
 }
+
+
+
+SMODS.Joker{
+    key = "slot_machine",
+
+    loc_txt = {
+        name = "Slot Machine",
+        text = {
+            "{C:green}#1# in 4{} chance to give",
+            "{X:chips,C:white}X#2#{} Chips",
+            "every hand played",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 1 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 2,             -- uncommon
+    cost = 6,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            x_chips = big(6),
+        }
+    },
+
+    -- Same "#1# in N" display convention Crystal's own tooltip uses
+    -- elsewhere in this file -- numerator scales with
+    -- G.GAME.probabilities.normal, denominator stays fixed at 4.
+    loc_vars = function(self, info_queue, card)
+        local prob_mod = (G.GAME and G.GAME.probabilities and G.GAME.probabilities.normal) or 1
+        return { vars = { prob_mod, card.ability.extra.x_chips } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            local prob_mod = (G.GAME and G.GAME.probabilities and G.GAME.probabilities.normal) or 1
+            local chance = math.min(1, (1 / 4) * prob_mod)
+
+            if pseudorandom(pseudoseed(mod.prefix .. "_slot_machine")) < chance then
+                return {
+                    x_chips = card.ability.extra.x_chips,
+                    colour = G.C.CHIPS,
+                }
+            end
+        end
+    end,
+}
+
+
+
+local function hex_card_has_suit(c, suit)
+    if not (c and c.base) then return false end
+    return c.base.suit == suit
+        or (SMODS.smeared_check and SMODS.smeared_check(c, suit))
+end
+
+
+
+SMODS.Joker{
+    key = "scarlet_amber",
+
+    loc_txt = {
+        name = "Scarlet Amber",
+        text = {
+            "Each played {C:hearts}Heart{} or",
+            "{C:diamonds}Diamond{} card gives",
+            "{C:chips}+#1#{} Chips when scored",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 0, y = 1 },
+    in_pool = hex_in_pool,
+    rarity = 1,
+    cost = 4,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            chips = big(20),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.chips } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.individual and context.cardarea == G.play then
+            if hex_card_has_suit(context.other_card, "Hearts") or hex_card_has_suit(context.other_card, "Diamonds") then
+                return {
+                    chips = card.ability.extra.chips,
+                    card = context.other_card,
+                    colour = G.C.CHIPS,
+                }
+            end
+        end
+    end,
+}
+
+
+
+SMODS.Joker{
+    key = "teal_ink",
+
+    loc_txt = {
+        name = "Teal Ink",
+        text = {
+            "Each played {C:clubs}Club{} or",
+            "{C:spades}Spade{} card gives",
+            "{C:mult}+#1#{} Mult when scored",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 0, y = 1 },
+    in_pool = hex_in_pool,
+    rarity = 1,
+    cost = 4,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            mult = big(2),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.mult } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.individual and context.cardarea == G.play then
+            if hex_card_has_suit(context.other_card, "Clubs") or hex_card_has_suit(context.other_card, "Spades") then
+                return {
+                    mult = card.ability.extra.mult,
+                    card = context.other_card,
+                    colour = G.C.MULT,
+                }
+            end
+        end
+    end,
+}
+
+
+-- Prime Lime: X1.5 Mult per played card whose rank is prime (2, 3, 5, 7,
+-- Ace counted as 1). Fires per scoring card via context.individual +
+-- cardarea == G.play, so each qualifying card stacks its own X1.5
+-- multiplicatively, same pattern as Scarlet Amber/Teal Ink.
+local hex_prime_ranks = {
+    ["2"] = true,
+    ["3"] = true,
+    ["5"] = true,
+    ["7"] = true,
+    ["Ace"] = true,
+}
+
+SMODS.Joker{
+    key = "prime_lime",
+
+    loc_txt = {
+        name = "Prime Lime",
+        text = {
+            "Gives {X:mult,C:white}X#1#{} Mult per",
+            "played {C:attention}Prime{} card",
+            "{C:inactive}(2, 3, 5, 7, Ace){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 1, y = 0 },
+    in_pool = hex_in_pool,
+    rarity = 3,
+    cost = 8,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            x_mult = big(1.5),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.x_mult } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.individual and context.cardarea == G.play then
+            if context.other_card.base and hex_prime_ranks[context.other_card.base.value] then
+                return {
+                    x_mult = card.ability.extra.x_mult,
+                    card = context.other_card,
+                    colour = G.C.MULT,
+                }
+            end
+        end
+    end,
+}
+
+
+
+
+-- Lucky Duckie: X1.75 Chips per played card whose rank is 3, 7, or 9.
+-- Same per-card individual-scoring pattern as Prime Lime.
+local hex_lucky_ranks = {
+    ["3"] = true,
+    ["7"] = true,
+    ["9"] = true,
+}
+
+SMODS.Joker{
+    key = "lucky_duckie",
+
+    loc_txt = {
+        name = "Lucky Duckie",
+        text = {
+            "Gives {X:chips,C:white}X#1#{} Chips per",
+            "played {C:attention}Lucky Number{} card",
+            "{C:inactive}(3, 7, 9){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 1, y = 0 },
+    in_pool = hex_in_pool,
+    rarity = 3,
+    cost = 8,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            x_chips = big(1.75),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.x_chips } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.individual and context.cardarea == G.play then
+            if context.other_card.base and hex_lucky_ranks[context.other_card.base.value] then
+                return {
+                    x_chips = card.ability.extra.x_chips,
+                    card = context.other_card,
+                    colour = G.C.CHIPS,
+                }
+            end
+        end
+    end,
+}
+
+
+
+
+
+
+-- Resonance: computed live off G.GAME.hex_points every time it's
+-- needed (loc_vars display + the actual retrigger count below), same
+-- "derived from current run state, not a stored counter" approach
+-- Boykisser's own hex_points-based Xmult uses elsewhere in this file.
+-- floor(hex_points / 20) gives the retrigger count (50 points floors
+-- down to 2, same as 20/40 do to 1/2), capped at 10 so it can't scale
+-- forever (hit at 200+ Hex points).
+local function hex_resonance_retriggers()
+    local hex_points = (G.GAME and G.GAME.hex_points) or big(0)
+    local raw = hex_to_plain_number(hex_points:div(big(20)):floor())
+
+    return math.min(10, math.max(0, math.floor(raw)))
+end
+
+SMODS.Joker{
+    key = "resonance",
+
+    loc_txt = {
+        name = "Resonance",
+        text = {
+            "Retrigger each played card",
+            "once for every {C:purple}20{} {C:purple}Hex points{}",
+            "you have {C:inactive}(rounded down){}",
+            "{C:inactive}(Max of #1# retriggers){}",
+            "{C:inactive}(Currently {}#2#{C:inactive} retriggers){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 1 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 2,             -- uncommon
+    cost = 6,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { 10, hex_resonance_retriggers() } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.repetition and context.cardarea == G.play and not context.blueprint then
+            local retriggers = hex_resonance_retriggers()
+
+            if retriggers > 0 then
+                return {
+                    repetitions = retriggers,
+                    card = context.other_card,
+                }
+            end
+        end
+    end,
+}
+
+
+
+
+
+
+
+
+-- Shared by all four "society" Jokers below: checks the plain and flush
+-- variant of a custom poker hand independently via context.poker_hands
+-- (keyed by mod.prefix .. "_<key>", confirmed from the crash log's own
+-- poker_hands dump) rather than context.scoring_name -- the flush
+-- variant always out-scores the plain one, so scoring_name alone would
+-- never read as the plain hand's name once the flush condition is also
+-- met. Since every flush variant's evaluate() condition is strictly a
+-- superset of its plain variant's, both entries populate together
+-- whenever the flush case applies, so returning both bonuses in the
+-- same table is safe -- there's no case where only the flush key alone
+-- is populated.
+local function hex_society_hand_bonus(context, hand_key, flush_key, Xmult, x_chips)
+    if not context.joker_main then return end
+
+    local ret = nil
+
+    if next(context.poker_hands[mod.prefix .. "_" .. hand_key]) then
+        ret = ret or {}
+        ret.Xmult = Xmult
+        ret.colour = G.C.MULT
+    end
+
+    if next(context.poker_hands[mod.prefix .. "_" .. flush_key]) then
+        ret = ret or {}
+        ret.x_chips = x_chips
+        ret.colour = G.C.CHIPS
+    end
+
+    return ret
+end
+
+SMODS.Joker{
+    key = "the_assembly",
+
+    loc_txt = {
+        name = "The Assembly",
+        text = {
+            "Gives {X:mult,C:white}X#1#{} Mult if",
+            "played hand is a {C:attention}Three Pair{}",
+            "Also gives {X:chips,C:white}X#2#{} Chips if",
+            "it's a {C:attention}Flush Three Pair{}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 1, y = 0 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 3,             -- rare
+    cost = 8,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            Xmult = big(5),
+            x_chips = big(3),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.Xmult, card.ability.extra.x_chips } }
+    end,
+
+    calculate = function(self, card, context)
+        return hex_society_hand_bonus(context, "three_pair", "flush_three_pair",
+            card.ability.extra.Xmult, card.ability.extra.x_chips)
+    end,
+}
+
+SMODS.Joker{
+    key = "the_legion",
+
+    loc_txt = {
+        name = "The Legion",
+        text = {
+            "Gives {X:mult,C:white}X#1#{} Mult if",
+            "played hand is a {C:attention}Four Pair{}",
+            "Also gives {X:chips,C:white}X#2#{} Chips if",
+            "it's a {C:attention}Flush Four Pair{}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 1, y = 0 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 3,             -- rare
+    cost = 8,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            Xmult = big(6),
+            x_chips = big(4),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.Xmult, card.ability.extra.x_chips } }
+    end,
+
+    calculate = function(self, card, context)
+        return hex_society_hand_bonus(context, "four_pair", "flush_four_pair",
+            card.ability.extra.Xmult, card.ability.extra.x_chips)
+    end,
+}
+
+SMODS.Joker{
+    key = "the_union",
+
+    loc_txt = {
+        name = "The Union",
+        text = {
+            "Gives {X:mult,C:white}X#1#{} Mult if",
+            "played hand is a",
+            "{C:attention}Dual Three of a Kind{}",
+            "Also gives {X:chips,C:white}X#2#{} Chips if",
+            "it's a {C:attention}Flush Dual Three of a Kind{}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 1, y = 0 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 3,             -- rare
+    cost = 8,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            Xmult = big(5),
+            x_chips = big(4),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.Xmult, card.ability.extra.x_chips } }
+    end,
+
+    calculate = function(self, card, context)
+        return hex_society_hand_bonus(context, "dual_three_of_a_kind", "flush_dual_three_of_a_kind",
+            card.ability.extra.Xmult, card.ability.extra.x_chips)
+    end,
+}
+
+SMODS.Joker{
+    key = "the_nation",
+
+    loc_txt = {
+        name = "The Nation",
+        text = {
+            "Gives {X:mult,C:white}X#1#{} Mult if",
+            "played hand is a {C:attention}Grand House{}",
+            "Also gives {X:chips,C:white}X#2#{} Chips if",
+            "it's a {C:attention}Flush Grand House{}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 1, y = 0 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 3,             -- rare
+    cost = 8,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            Xmult = big(10),
+            x_chips = big(7),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.Xmult, card.ability.extra.x_chips } }
+    end,
+
+    calculate = function(self, card, context)
+        return hex_society_hand_bonus(context, "grand_house", "flush_grand_house",
+            card.ability.extra.Xmult, card.ability.extra.x_chips)
+    end,
+}
+
+
+
+
+
+SMODS.Joker{
+    key = "mandelbrot_set",
+
+    loc_txt = {
+        name = "Mandelbrot Set",
+        text = {
+            "{C:attention}+2{} card selection limit",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 1 }, -- placeholder art slot
+
+    rarity = 2,
+    cost = 7,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false, -- matches Polydactyly: this is a passive "owned" state check, not a calculate effect, so Blueprint copying it wouldn't do anything meaningful
+    eternal_compat = true,
+}
+
+
+
+
+-- Counts currently-owned Jokers (G.jokers.cards, including this card
+-- itself if it happens to carry a matching edition) with the given
+-- edition key set -- same "foil"/"holo"/"polychrome" field names
+-- Barnard's Star already uses elsewhere in this file for j.edition.
+local function hex_count_edition_jokers(edition_key)
+    if not (G.jokers and G.jokers.cards) then return 0 end
+
+    local count = 0
+    for _, j in ipairs(G.jokers.cards) do
+        if j.edition and j.edition[edition_key] then
+            count = count + 1
+        end
+    end
+
+    return count
+end
+
+SMODS.Joker{
+    key = "edition_joker",
+
+    loc_txt = {
+        name = "Edition Joker",
+        text = {
+            "Gives {C:chips}+#1#{} Chips per {C:dark_edition}Foil{}",
+            "Joker, {C:mult}+#2#{} Mult per",
+            "{C:dark_edition}Holographic{} Joker, and",
+            "{X:mult,C:white}+#3#{} Xmult per",
+            "{C:dark_edition}Polychrome{} Joker you own",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 1 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 2,             -- uncommon 
+    cost = 6,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            chips_per_foil = big(50),
+            mult_per_holo = big(10),
+            xmult_per_poly = big(0.5),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return {
+            vars = {
+                card.ability.extra.chips_per_foil,
+                card.ability.extra.mult_per_holo,
+                card.ability.extra.xmult_per_poly,
+            }
+        }
+    end,
+
+    -- Live, fully dynamic -- same "derived from current state every time
+    -- it scores" approach Stamp Collection/Boykisser use elsewhere in
+    -- this file, rather than a permanent stacking counter. Rises and
+    -- falls immediately as Jokers with these editions are bought, sold,
+    -- destroyed, or re-edition'd.
+    calculate = function(self, card, context)
+        if context.joker_main then
+            local foil_count = hex_count_edition_jokers("foil")
+            local holo_count = hex_count_edition_jokers("holo")
+            local poly_count = hex_count_edition_jokers("polychrome")
+
+            local chips = card.ability.extra.chips_per_foil:mul(big(foil_count))
+            local mult = card.ability.extra.mult_per_holo:mul(big(holo_count))
+            local xmult = big(1):add(card.ability.extra.xmult_per_poly:mul(big(poly_count)))
+
+            return {
+                chips = chips,
+                mult = mult,
+                Xmult = xmult,
+                colour = G.C.MULT,
+            }
+        end
+    end,
+}
+
+
+-- Trans Pride: +0.1 Xchips and +0.1 Xmult for every time a PLAYING
+-- CARD you own has its edition, suit, rank, enhancement, or seal
+-- changed, since this specific card was added to your Jokers.
+-- change_count lives on THIS card's own ability.extra (same per-
+-- instance-tracking approach Infestation's hexed_count uses elsewhere
+-- in this file), incremented for every currently-owned copy
+-- independently -- so multiple copies each track their own total
+-- starting from their own add_to_deck moment, same as Infestation.
+--
+-- Wraps Card:set_edition, Card:set_ability (enhancements),
+-- Card:set_seal, and Card:set_base (suit/rank -- vanilla sets a card's
+-- identity as one base object covering both together, not as separate
+-- setters). CHANGED: each wrap now passes the card being modified into
+-- hex_trans_pride_tick, which only counts it if it's an owned playing
+-- card -- shop rerolls, pack contents, and Joker edition/ability
+-- changes no longer tick the counter.
+local function hex_is_owned_playing_card(target_card)
+    if not (G.playing_cards and target_card) then return false end
+
+    for _, c in ipairs(G.playing_cards) do
+        if c == target_card then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function hex_trans_pride_tick(target_card)
+    if not hex_is_owned_playing_card(target_card) then return end
+    if not (G.jokers and G.jokers.cards) then return end
+
+    for _, j in ipairs(G.jokers.cards) do
+        if j.config and j.config.center
+        and j.config.center.key == ("j_" .. mod.prefix .. "_trans_pride") then
+
+            j.ability.extra.change_count = (j.ability.extra.change_count or big(0)):add(big(1))
+        end
+    end
+end
+
+local hex_old_set_edition_trans_pride = Card.set_edition
+function Card:set_edition(...)
+    hex_trans_pride_tick(self)
+    return hex_old_set_edition_trans_pride(self, ...)
+end
+
+-- set_ability's second arg is `initial` -- true when a card's ability
+-- is just being (re)established (card/joker creation, shop reroll/
+-- dedupe swaps) rather than an actual gameplay change. Skipped so
+-- creation noise doesn't tick the counter even on the rare chance a
+-- playing card is somehow re-initialized outside G.playing_cards.
+local hex_old_set_ability_trans_pride = Card.set_ability
+function Card:set_ability(center, initial, ...)
+    if not initial then
+        hex_trans_pride_tick(self)
+    end
+    return hex_old_set_ability_trans_pride(self, center, initial, ...)
+end
+
+local hex_old_set_seal_trans_pride = Card.set_seal
+function Card:set_seal(...)
+    hex_trans_pride_tick(self)
+    return hex_old_set_seal_trans_pride(self, ...)
+end
+
+local hex_old_set_base_trans_pride = Card.set_base
+function Card:set_base(...)
+    hex_trans_pride_tick(self)
+    return hex_old_set_base_trans_pride(self, ...)
+end
+
+SMODS.Joker{
+    key = "trans_pride",
+
+    loc_txt = {
+        name = "Trans Pride",
+        text = {
+            "Gives {X:chips,C:white}X#1#{} Chips and",
+            "{X:mult,C:white}X#1#{} Mult for every time",
+            "a card {C:attention}you own{}'s {C:attention}Edition{}, {C:attention}Suit{},",
+            "{C:attention}Rank{}, {C:attention}Enhancement{}, or {C:attention}Seal{} changes",
+            "since owning this",
+            "{C:inactive}(Currently {}{X:purple,C:white}X#2#{}{C:inactive} Chips and Mult){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 8, y = 0 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 3,             -- rare
+    cost = 8,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true, -- change_count is per-instance and targeted by key in the wraps above -- a Blueprint copy wouldn't track its own count
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            per_change = big(0.1),
+            change_count = big(0),
+        }
+    },
+
+    add_to_deck = function(self, card, from_debuff)
+        card.ability.extra.change_count = big(0)
+    end,
+
+    loc_vars = function(self, info_queue, card)
+        local count = card.ability.extra.change_count or big(0)
+        local stat = big(1):add(card.ability.extra.per_change:mul(count))
+
+        return { vars = { card.ability.extra.per_change, stat } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            local count = card.ability.extra.change_count or big(0)
+            local stat = big(1):add(card.ability.extra.per_change:mul(count))
+
+            return {
+                x_chips = stat,
+                Xmult = stat,
+                colour = G.C.MULT,
+            }
+        end
+    end,
+}
+
+
+
+
+-- The Death Card: X3 Chips and X3 Mult for every played Ace of Spades.
+-- Fires per scoring card via context.individual + cardarea == G.play, so
+-- multiple Aces of Spades in the same hand each apply their own X3/X3
+-- multiplicatively (stacking naturally through the normal scoring loop,
+-- same as any other per-card Xchips/Xmult joker).
+SMODS.Joker{
+    key = "the_death_card",
+
+    loc_txt = {
+        name = "The Death Card",
+        text = {
+            "Gives {X:chips,C:white}X#1#{} Chips and",
+            "{X:mult,C:white}X#1#{} Mult for every",
+            "played {C:spades}Ace of Spades{}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 1, y = 0 },
+    in_pool = hex_in_pool,
+    rarity = 3,
+    cost = 8,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            x_chips = big(3),
+            Xmult = big(3),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.x_chips } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.individual and context.cardarea == G.play then
+            if context.other_card.base
+            and context.other_card.base.value == "Ace"
+            and hex_card_has_suit(context.other_card, "Spades") then
+
+                return {
+                    x_chips = card.ability.extra.x_chips,
+                    Xmult = card.ability.extra.Xmult,
+                    card = context.other_card,
+                    colour = G.C.CHIPS,
+                }
+            end
+        end
+    end,
+}
+
+
+
+SMODS.Joker{
+    key = "second_sight",
+
+    loc_txt = {
+        name = "Second Sight",
+        text = {
+            "Creates a {C:tarot}Tarot{} card if",
+            "the played hand is a single",
+            "scoring {C:attention}2{}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 0, y = 1 },
+    in_pool = hex_in_pool,
+    rarity = 1,
+    cost = 5,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    calculate = function(self, card, context)
+        if context.before
+        and next(context.poker_hands["High Card"])
+        and #context.full_hand == 1
+        and context.full_hand[1].base.value == "2"
+        and not context.blueprint then
+
+            G.E_MANAGER:add_event(Event({
+                trigger = "after",
+                delay = 0.2,
+                func = function()
+                    if G.consumeables and #G.consumeables.cards < G.consumeables.config.card_limit then
+                        local tarot_card = SMODS.create_card({
+                            set = "Tarot",
+                            area = G.consumeables,
+                        })
+                        G.consumeables:emplace(tarot_card)
+                    end
+                    return true
+                end
+            }))
+
+            return {
+                message = "+Tarot",
+                colour = G.C.SECONDARY_SET.Tarot,
+            }
+        end
+    end,
+}
+
+
+-- Blackjack: X2 Mult and X3 Chips if the played hand's scoring cards'
+-- rank values add up to exactly 21. Uses the same rank-value mapping
+-- Face Value's own per-card Mult reads off base.value elsewhere in this
+-- file (Ace = 11, King/Queen/Jack = 10, number cards = face value).
+local HEX_BLACKJACK_RANK_VALUES = {
+    ["Ace"] = 11,
+    ["King"] = 10,
+    ["Queen"] = 10,
+    ["Jack"] = 10,
+    ["10"] = 10,
+    ["9"] = 9,
+    ["8"] = 8,
+    ["7"] = 7,
+    ["6"] = 6,
+    ["5"] = 5,
+    ["4"] = 4,
+    ["3"] = 3,
+    ["2"] = 2,
+}
+
+SMODS.Joker{
+    key = "blackjack",
+
+    loc_txt = {
+        name = "Blackjack",
+        text = {
+            "{X:mult,C:white}X#1#{} Mult and",
+            "{X:chips,C:white}X#2#{} Chips if played",
+            "hand's scoring cards add",
+            "up to {C:attention}exactly 21{}",
+            "{C:inactive}(Ace=11, King/Queen/Jack=10){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 1 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 2,             -- 1 common, 2 uncommon, 3 rare, 4 legendary
+    cost = 6,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            Xmult = big(2),
+            x_chips = big(3),
+            hand_rank_sum = 0,
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.Xmult, card.ability.extra.x_chips } }
+    end,
+
+    calculate = function(self, card, context)
+        -- Resets the running rank total at the start of every hand's
+        -- scoring pass. context.before fires once per hand, ahead of
+        -- both the per-card context.individual triggers below and this
+        -- joker's own context.joker_main further down -- same ordering
+        -- Sharp Card's own context.before reset relies on elsewhere in
+        -- this file. Guarded with not context.blueprint so a Blueprint
+        -- copy sitting next to this doesn't reset/re-accumulate its own
+        -- separate count.
+        if context.before and not context.blueprint then
+            card.ability.extra.hand_rank_sum = 0
+        end
+
+        -- Adds up every scoring card's rank value as it's scored, using
+        -- the same base.value rank lookup Face Value's own per-card
+        -- Mult reads elsewhere in this file. Retriggered cards count
+        -- more than once, same convention this file's other per-card
+        -- accumulators (Cubed Joker, Hatsune Miku) already use.
+        if context.individual and context.cardarea == G.play and not context.blueprint then
+            local rank_value = context.other_card.base and HEX_BLACKJACK_RANK_VALUES[context.other_card.base.value]
+
+            if rank_value then
+                card.ability.extra.hand_rank_sum = (card.ability.extra.hand_rank_sum or 0) + rank_value
+            end
+        end
+
+        -- By the time joker_main fires, every scoring card for this
+        -- hand has already been counted above.
+        if context.joker_main and card.ability.extra.hand_rank_sum == 21 then
+            return {
+                x_chips = card.ability.extra.x_chips,
+                Xmult = card.ability.extra.Xmult,
+                colour = G.C.MULT,
+            }
+        end
+    end,
+}
+
+
+
+SMODS.Joker{
+    key = "receipt",
+
+    loc_txt = {
+        name = "Receipt",
+        text = {
+            "Gives {C:money}+$1{} every time",
+            "you open a {C:attention}Booster Pack{}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 0, y = 1 },
+    in_pool = hex_in_pool,
+    rarity = 1,
+    cost = 4,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    calculate = function(self, card, context)
+        if context.open_booster and not context.blueprint then
+            return {
+                dollars = big(1),
+                colour = G.C.MONEY,
+            }
+        end
+    end,
+}
+
+
+
+
+
 
 -- Encore: retriggers Bonus and Mult enhancement cards once more.
 -- Standard vanilla retrigger-joker shape (context.repetition +
@@ -1646,7 +3797,7 @@ SMODS.Joker{
 
     config = {
         extra = {
-            mult_per_card = 6,
+            mult_per_card = big(6),
         }
     },
 
@@ -1676,7 +3827,7 @@ SMODS.Joker{
 
             if unscored > 0 then
                 return {
-                    mult = unscored * card.ability.extra.mult_per_card,
+                    mult = big(unscored):mul(card.ability.extra.mult_per_card),
                     colour = G.C.MULT,
                 }
             end
@@ -1728,6 +3879,254 @@ SMODS.Joker{
 }
 
 
+-- Landlord: X4 Mult while money is in debt, and raises the debt ceiling
+-- to -$30 while owned. bankrupt_at isn't set once on pickup -- it's
+-- recomputed fresh every frame from whichever debt-granting sources are
+-- currently owned (this joker, plus vanilla's own Credit Card at -$20),
+-- the same "poll in Game:update" approach Wall Clock/Taxes Due already
+-- use elsewhere in this file. Recomputing from scratch each frame (vs.
+-- incrementally raising/lowering it) means add/remove/sell order can
+-- never leave it stuck at the wrong value, and multiple debt sources
+-- correctly stack to whichever is most generous (lowest).
+local HEX_LANDLORD_DEBT_LIMIT = -30
+
+local function hex_landlord_calc_bankrupt_at()
+    local floor = 0
+
+    if G.jokers and G.jokers.cards then
+        for _, j in ipairs(G.jokers.cards) do
+            if j.config and j.config.center then
+                local key = j.config.center.key
+
+                if key == "j_credit_card" then
+                    floor = math.min(floor, -20)
+                elseif key == ("j_" .. mod.prefix .. "_landlord") then
+                    floor = math.min(floor, HEX_LANDLORD_DEBT_LIMIT)
+                end
+            end
+        end
+    end
+
+    return floor
+end
+
+local hex_old_update_landlord = Game.update
+
+function Game:update(dt)
+    hex_old_update_landlord(self, dt)
+
+    if G.jokers and G.jokers.cards and G.GAME then
+        G.GAME.bankrupt_at = hex_landlord_calc_bankrupt_at()
+    end
+end
+
+SMODS.Joker{
+    key = "landlord",
+
+    loc_txt = {
+        name = "Landlord",
+        text = {
+            "{X:mult,C:white}X#1#{} Mult if your",
+            "{C:money}money{} is {C:attention}in debt{}",
+            "Allows money to go up to",
+            "{C:money}-$#2#{}{} in debt",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 1 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 2,             -- 1 common, 2 uncommon, 3 rare, 4 legendary
+    cost = 6,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            Xmult = big(4),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.Xmult, -HEX_LANDLORD_DEBT_LIMIT } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main and G.GAME.dollars:lt(big(0)) then
+            return {
+                Xmult = card.ability.extra.Xmult,
+                colour = G.C.MULT,
+            }
+        end
+    end,
+}
+
+
+
+
+
+
+-- Bulletproof: makes Glass Cards' break roll always fail, AND updates
+-- Glass's own tooltip to display "0 in 4" while owned. Both hooks wrap
+-- Glass's own center functions directly (the same functions Crystal's
+-- "#1# in 2" tooltip pattern elsewhere in this file relies on for its
+-- own probability display) rather than guessing at internals:
+--   - calculate() is wrapped to strip the `remove` result on the
+--     destroy_card pass, so the card physically never breaks.
+--   - loc_vars() is wrapped to zero out the numerator it feeds into
+--     Glass's "#1# in 4" text, so the tooltip reads "0 in 4" too.
+-- Both wraps happen lazily on the first Game:update tick rather than at
+-- file load, since G.P_CENTERS.m_glass may not exist yet at the point
+-- this file's top-level code runs.
+local function hex_bulletproof_owned()
+    if not (G.jokers and G.jokers.cards) then return false end
+
+    for _, j in ipairs(G.jokers.cards) do
+        if j.config and j.config.center
+        and j.config.center.key == ("j_" .. mod.prefix .. "_bulletproof") then
+            return true
+        end
+    end
+
+    return false
+end
+
+local hex_glass_calculate_wrapped = false
+
+local function hex_wrap_glass_calculate()
+    if hex_glass_calculate_wrapped then return end
+    if not (G.P_CENTERS and G.P_CENTERS.m_glass and G.P_CENTERS.m_glass.calculate) then return end
+
+    local hex_old_glass_calculate = G.P_CENTERS.m_glass.calculate
+
+    G.P_CENTERS.m_glass.calculate = function(self, card, context)
+        local ret = hex_old_glass_calculate(self, card, context)
+
+        if ret and ret.remove and context.destroy_card and hex_bulletproof_owned() then
+            ret.remove = nil -- card survives -- 0 in 4 chance to break while owned
+        end
+
+        return ret
+    end
+
+    hex_glass_calculate_wrapped = true
+end
+
+
+
+
+local hex_old_update_bulletproof = Game.update
+
+function Game:update(dt)
+    hex_old_update_bulletproof(self, dt)
+    hex_wrap_glass_calculate()
+end
+
+SMODS.Joker{
+    key = "bulletproof",
+
+    loc_txt = {
+        name = "Bulletproof",
+        text = {
+            "{C:attention}Glass Cards{} never break",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 1 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 2,             -- 1 common, 2 uncommon, 3 rare, 4 legendary
+    cost = 5,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false,
+    eternal_compat = true,
+
+}
+
+
+-- 01101010: destroys itself the instant you're holding more than 3
+-- Jokers (this one included) -- checked every frame via Game:update
+-- rather than only during calculate()'s context.joker_main, since the
+-- old version only re-checked the count when a hand was actually
+-- played, so it never reacted to just picking up a 4th Joker. Guarded
+-- with hex_01101010_dissolving so it only calls start_dissolve() once
+-- per card, instead of every single frame while the dissolve animation
+-- is still playing out.
+local hex_01101010_dissolving = {}
+
+local hex_old_update_01101010 = Game.update
+
+function Game:update(dt)
+    hex_old_update_01101010(self, dt)
+
+    if G.jokers and G.jokers.cards and #G.jokers.cards > 3 then
+        for _, j in ipairs(G.jokers.cards) do
+            if j.config and j.config.center
+            and j.config.center.key == ("j_" .. mod.prefix .. "_01101010")
+            and not hex_01101010_dissolving[j] then
+
+                hex_01101010_dissolving[j] = true
+                HEX_01101010_SHOULD_CRASH = true 
+
+                card_eval_status_text(j, "extra", nil, nil, nil, {
+                    message = "Destroyed!",
+                    colour = G.C.RED,
+                })
+
+                j:start_dissolve()
+            end
+        end
+    end
+end
+
+
+SMODS.Joker{
+    key = "01101010",
+
+    loc_txt = {
+        name = "01101010",
+        text = {
+            "Gives {C:mult}+100{} Mult",
+            "{C:red}Destroys{} itself if you have",
+            "more than {C:attention}3{} Jokers",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 1 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 2,             -- 1 common, 2 uncommon, 3 rare, 4 legendary
+    cost = 6,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = false,
+
+    config = {
+        extra = {
+            mult = big(100),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.mult } }
+    end,
+
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+
+            return {
+                mult = card.ability.extra.mult,
+                colour = G.C.MULT,
+            }
+        end
+    end,
+}
+
 -- Winning Streak: +7 Mult permanently for every Blind won in exactly one hand;
 -- resets to 0 the moment a Blind takes more than one hand to win.
 -- Hands played this round are counted at context.joker_main (fires
@@ -1759,9 +4158,9 @@ SMODS.Joker{
 
     config = {
         extra = {
-            mult = 0,
+            mult = big(0),
             hands_this_round = 0,
-            mult_gain = 7,
+            mult_gain = big(7),
         }
     },
 
@@ -1785,9 +4184,9 @@ SMODS.Joker{
             card.hex_streak_last_round = G.GAME.round
 
             if (card.ability.extra.hands_this_round or 0) == 1 then
-                card.ability.extra.mult = card.ability.extra.mult + card.ability.extra.mult_gain
+                card.ability.extra.mult = (card.ability.extra.mult):add(card.ability.extra.mult_gain)
             else
-                card.ability.extra.mult = 0
+                card.ability.extra.mult = big(0)
             end
 
             card.ability.extra.hands_this_round = 0
@@ -1839,7 +4238,7 @@ SMODS.Joker{
         and not context.blueprint then
 
             return {
-                chips = 10,
+                chips = big(10),
                 card = context.other_card,
                 colour = G.C.CHIPS,
             }
@@ -1913,8 +4312,8 @@ function Game:update(dt)
 
                 while j.ability.extra.elapsed >= 10 do
                     j.ability.extra.elapsed = j.ability.extra.elapsed - 10
-                    j.ability.extra.chips = (j.ability.extra.chips or 0) + 20
-                    j.ability.extra.mult = (j.ability.extra.mult or 0) + 2
+                    j.ability.extra.chips = (j.ability.extra.chips or 0):add(big(20))
+                    j.ability.extra.mult = (j.ability.extra.mult or 0):add(big(2))
                 end
             end
         end
@@ -1932,7 +4331,6 @@ SMODS.Joker{
             "{C:chips}+20{} Chips and {C:mult}+2{} Mult",
             "{C:inactive}(Currently {}{C:chips}+#1#{}{C:inactive} Chips){}",
             "{C:inactive}({}{C:mult}+#2#{}{C:inactive} Mult){}",
-            ""
         }
     },
 
@@ -1948,8 +4346,8 @@ SMODS.Joker{
 
     config = {
         extra = {
-            chips = 0,
-            mult = 0,
+            chips = big(0),
+            mult = big(0),
             elapsed = 0,
         }
     },
@@ -1969,6 +4367,44 @@ SMODS.Joker{
 }
 
 
+SMODS.Joker{
+    key = "warehouse",
+
+    loc_txt = {
+        name = "Warehouse",
+        text = {
+            "Gives {C:attention}+1{} Booster Pack slot",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 1, y = 0 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 3,             -- rare
+    cost = 10,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false, -- the effect lives in the lifecycle hooks below, not calculate()
+    eternal_compat = true,
+
+    -- Same SMODS.change_booster_limit call Overstock Plus Plus's own
+    -- redeem() uses elsewhere in this file, just applied through
+    -- add_to_deck/remove_from_deck instead of a one-shot voucher
+    -- redeem, since a Joker is owned continuously rather than redeemed
+    -- once. Applied exactly once no matter how the card enters/leaves
+    -- your Jokers (bought, created via Life/Manifest-style summon,
+    -- sold, destroyed, etc.), and correctly reverses if sold.
+    add_to_deck = function(self, card, from_debuff)
+        SMODS.change_booster_limit(1)
+    end,
+
+    remove_from_deck = function(self, card, from_debuff)
+        SMODS.change_booster_limit(-1)
+    end,
+}
+
+
+
 
 SMODS.Joker{
     key = "musa_acuminata",
@@ -1976,7 +4412,7 @@ SMODS.Joker{
     loc_txt = {
         name = "Musa Acuminata",
         text = {
-            "This Joker {C:purple}^2{}",
+            "This Joker {C:purple}^#1#{}",
             "Mult",
         }
     },
@@ -1991,6 +4427,16 @@ SMODS.Joker{
     blueprint_compat = true,
     eternal_compat = true,
 
+    config = {
+        extra = {
+            e_mult = big(2),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.e_mult } }
+    end,
+
     -- Only appears after Cavendish breaks
     in_pool = function(self)
         return (hex_owns_showman() or #SMODS.find_card(self.key) == 0)
@@ -2001,7 +4447,7 @@ SMODS.Joker{
 
         if context.joker_main then
             return {
-                e_mult = big(2),
+                e_mult = card.ability.extra.e_mult,
                 colour = G.C.PURPLE
             }
 
@@ -2009,23 +4455,41 @@ SMODS.Joker{
     end
 }
 
+
+-- Cavendish also receives context.selling_card + context.card during its
+-- own sale, exactly like Trash Bin's sell-detection elsewhere in this
+-- file. This stamps a short-lived flag right when that happens -- BEFORE
+-- start_dissolve's own hook below runs -- so that hook can tell "sold"
+-- apart from "actually destroyed" instead of treating both the same way.
+-- Same wrap-by-name technique the Certificate/Perkeo overrides above
+-- already use.
+local hex_old_calculate_joker_cavendish = Card.calculate_joker
+
+function Card:calculate_joker(context)
+    if self.ability and self.ability.name == 'Cavendish'
+    and context.selling_card
+    and context.card == self then
+        self.hex_cavendish_being_sold = true
+    end
+
+    return hex_old_calculate_joker_cavendish(self, context)
+end
+
+
 local old_start_dissolve = Card.start_dissolve
 
 function Card.start_dissolve(self, ...)
-    
+
     if self.config
     and self.config.center
-    and self.config.center.key == "j_cavendish" then
+    and self.config.center.key == "j_cavendish"
+    and not self.hex_cavendish_being_sold then
         G.GAME.cavendish_broken = true
     end
 
-    -- Immortal sticker: blocks this exact card from ever being
-    -- dissolved/destroyed by anything -- selling, debuffs, other
-    -- Jokers' destroy effects, the HEX sacrifice button, all of it --
-    -- with a single deliberate exception. G.HEX_ABSOLUTE_SUMMONING is
-    -- set true only for the brief moment G.FUNCS.summon_absolute spends
-    -- destroying every currently-held Joker, and cleared immediately
-    -- after, so that's the one window this block gets bypassed in.
+    self.hex_cavendish_being_sold = nil -- clear either way, so a future genuine destroy isn't wrongly suppressed
+
+    -- (rest of the existing Immortal-sticker block stays exactly the same)
     if self.ability
     and self.ability[HEX_IMMORTAL_STICKER_KEY]
     and not G.HEX_ABSOLUTE_SUMMONING then
@@ -2034,7 +4498,6 @@ function Card.start_dissolve(self, ...)
 
     return old_start_dissolve(self, ...)
 end
-
 -- Perkeo: exclude Ritual and Star consumables from the pool Perkeo can
 -- copy at end of round, without restricting either from being copied by
 -- any other copy source in the game (Blueprint, other copy effects,
@@ -2198,9 +4661,9 @@ SMODS.Joker{
     loc_txt = {
         name = "Accumulation Joker",
         text = {
-            "Gains {X:mult,C:white}X0.25{} Mult after",
+            "Gains {X:mult,C:white}X#3#{} Mult after",
             "every {C:attention}Small{} and {C:attention}Big Blind{}",
-            "Gains {X:chips,C:white}X0.5{} Chips after",
+            "Gains {X:chips,C:white}X#4#{} Chips after",
             "every {C:attention}Boss Blind{}",
             "{C:inactive}(Currently {}{X:mult,C:white}X#1#{}{C:inactive} Mult){}",
             "{C:inactive}({}{X:chips,C:white}X#2#{}{C:inactive} Chips){}",
@@ -2222,13 +4685,13 @@ SMODS.Joker{
         extra = {
             Xmult = big(1),
             Xmult_gain = big(0.25),
-            xchips = big(1),
-            xchips_gain = big(0.5),
+            x_chips = big(1),
+            x_chips_gain = big(0.5),
         }
     },
 
     loc_vars = function(self, info_queue, card)
-        return { vars = { card.ability.extra.Xmult, card.ability.extra.xchips } }
+        return { vars = { card.ability.extra.Xmult, card.ability.extra.x_chips, card.ability.extra.Xmult_gain, card.ability.extra.x_chips_gain } }
     end,
 
     calculate = function(self, card, context)
@@ -2246,7 +4709,7 @@ SMODS.Joker{
             card.hex_accumulation_last_round = G.GAME.round
 
             if G.GAME.blind and G.GAME.blind.boss then
-                card.ability.extra.xchips = card.ability.extra.xchips:add(card.ability.extra.xchips_gain)
+                card.ability.extra.x_chips = card.ability.extra.x_chips:add(card.ability.extra.x_chips_gain)
 
                 return {
                     message = localize("k_upgrade_ex"),
@@ -2266,10 +4729,10 @@ SMODS.Joker{
 
 
 SMODS.Joker{
-    key = "the_seal_of_aces",
+    key = "ace_of_seals",
 
     loc_txt = {
-        name = "The Seal of Aces",
+        name = "Ace of Seals",
         text = {
             "Played {C:attention}Aces{} are given",
             "a {C:attention}random Seal{}",
@@ -2314,6 +4777,149 @@ SMODS.Joker{
         end
     end,
 }
+
+
+
+
+-- Joker Archive: +0.15 Xmult for every DIFFERENT Joker owned at any
+-- point this run -- not just currently owned. G.GAME.hex_joker_archive_seen
+-- is a persistent run-scoped set (key -> true), polled and filled in
+-- every Game:update tick from G.jokers.cards, same lazy per-frame
+-- technique Landlord/Bulletproof/Iron Joker use elsewhere in this file.
+-- Once a key is marked true it's never cleared, so selling/destroying a
+-- Joker doesn't undo its contribution -- exactly "owned this run", not
+-- "currently owned". Plain Lua table/boolean, so it saves/loads fine
+-- the same way G.GAME.used_vouchers and other persistent hex_* run
+-- state already do elsewhere in this file.
+local function hex_track_joker_archive()
+    if not (G.jokers and G.jokers.cards) then return end
+
+    G.GAME.hex_joker_archive_seen = G.GAME.hex_joker_archive_seen or {}
+
+    for _, j in ipairs(G.jokers.cards) do
+        if j.config and j.config.center and j.config.center.key then
+            G.GAME.hex_joker_archive_seen[j.config.center.key] = true
+        end
+    end
+end
+
+local hex_old_update_joker_archive = Game.update
+
+function Game:update(dt)
+    hex_old_update_joker_archive(self, dt)
+    hex_track_joker_archive()
+end
+
+local function hex_count_joker_archive_seen()
+    local seen = G.GAME and G.GAME.hex_joker_archive_seen
+    if not seen then return 0 end
+
+    local count = 0
+    for _ in pairs(seen) do
+        count = count + 1
+    end
+
+    return count
+end
+
+SMODS.Joker{
+    key = "joker_archive",
+
+    loc_txt = {
+        name = "Joker Archive",
+        text = {
+            "Gives {X:mult,C:white}X#1#{} Mult for every",
+            "{C:attention}different Joker{} you've",
+            "owned {C:attention}this run{}",
+            "{C:inactive}(Currently {}{X:mult,C:white}X#2#{}{C:inactive} Mult){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 1, y = 0 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 3,             -- rare
+    cost = 8,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            per_joker_xmult = big(0.15),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        local count = hex_count_joker_archive_seen()
+        local xmult = big(1):add(card.ability.extra.per_joker_xmult:mul(big(count)))
+
+        return { vars = { card.ability.extra.per_joker_xmult, xmult } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            local count = hex_count_joker_archive_seen()
+            local xmult = big(1):add(card.ability.extra.per_joker_xmult:mul(big(count)))
+
+            return {
+                Xmult = xmult,
+                colour = G.C.MULT,
+            }
+        end
+    end,
+}
+
+
+
+
+
+SMODS.Joker{
+    key = "deep_pockets",
+
+    loc_txt = {
+        name = "Deep Pockets",
+        text = {
+            "Gives {X:chips,C:white}X#1#{} Chips if",
+            "you have {C:money}$100{} or more",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 1 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 2,            
+    cost = 7,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            x_chips = big(5),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.x_chips } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main and G.GAME.dollars:gte(big(100)) then
+            return {
+                x_chips = card.ability.extra.x_chips,
+                colour = G.C.CHIPS,
+            }
+        end
+    end,
+}
+
+
+
+
+
 
 
 -- Checks the live balance every frame instead of hooking a specific
@@ -2382,10 +4988,21 @@ SMODS.Joker{
     blueprint_compat = true,
     eternal_compat = true,
 
+    config = {
+        extra = {
+            x_chips = big(3),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.x_chips } }
+    end,
+
+
     calculate = function(self, card, context)
         if context.joker_main then
             return {
-                x_chips = 3,
+                x_chips = card.ability.extra.x_chips,
                 colour = G.C.CHIPS,
             }
         end
@@ -2434,6 +5051,60 @@ SMODS.Joker{
         end
     end,
 }
+
+-- Number-card ranks only -- excludes Jack/Queen/King/Ace, same "2".."10"
+-- string-digit convention hex_lucky_ranks uses elsewhere in this file
+-- for its own rank checks (base.value stores digits for number cards,
+-- full words like "Jack"/"Ace" for face cards).
+local HEX_NUMBER_CARD_RANKS = {
+    ["2"] = true, ["3"] = true, ["4"] = true, ["5"] = true, ["6"] = true,
+    ["7"] = true, ["8"] = true, ["9"] = true, ["10"] = true,
+}
+
+SMODS.Joker{
+    key = "four_leaf_clover",
+
+    loc_txt = {
+        name = "4-Leaf Clover",
+        text = {
+            "Played {C:attention}number cards{}",
+            "become {C:attention}Lucky Cards{}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 1 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 2,             -- uncommon
+    cost = 6,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false,
+    eternal_compat = true,
+
+    -- Same conversion pattern Chameleon (Ace -> Wild Card) uses
+    -- elsewhere in this file: context.individual + context.cardarea ==
+    -- G.play, only re-applying if the card isn't already Lucky so
+    -- retriggers on the same card don't spam the upgrade popup.
+    calculate = function(self, card, context)
+        if context.individual
+        and context.cardarea == G.play
+        and not context.blueprint
+        and context.other_card.base
+        and HEX_NUMBER_CARD_RANKS[context.other_card.base.value]
+        and not (context.other_card.config and context.other_card.config.center
+            and context.other_card.config.center.key == "m_lucky") then
+
+            context.other_card:set_ability(G.P_CENTERS.m_lucky, nil, true)
+
+            return {
+                message = localize("k_upgrade_ex"),
+                colour = G.C.SECONDARY_SET.Enhanced,
+            }
+        end
+    end,
+}
+
 
 -- Refund: +$1 when a Joker is successfully hexed. Hooks
 -- G.FUNCS.hex_sacrifice directly (calculate() has no context flag for
@@ -2501,13 +5172,85 @@ SMODS.Joker{
     end,
 }
 
+
+-- Iron Joker: while owned, every Steel card's held-in-hand Mult
+-- multiplier is boosted from vanilla's X1.5 to X3. Rather than hooking
+-- an unverified internal getter, this directly overwrites the field
+-- vanilla's own Steel Card actually reads -- h_x_mult, confirmed as a
+-- real scoring-stat field by this mod's own HEX_ENTROPY_SCORE_PATTERNS
+-- list ("^h_x_mult$") elsewhere in this file, and matching m_steel's
+-- own config = {h_x_mult = 1.5} exactly. Polled every frame (same
+-- Game:update technique Landlord/Bulletproof use elsewhere in this
+-- file) over G.playing_cards -- the master full-deck registry Diamond
+-- Card's own helper uses -- so this covers Steel cards you already own
+-- AND any created after buying Iron Joker, and correctly reverts back
+-- to 1.5 the instant Iron Joker is sold or destroyed.
+local function hex_iron_joker_owned()
+    if not (G.jokers and G.jokers.cards) then return false end
+
+    for _, j in ipairs(G.jokers.cards) do
+        if j.config and j.config.center
+        and j.config.center.key == ("j_" .. mod.prefix .. "_iron_joker") then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function hex_apply_iron_joker_steel_boost()
+    if not G.playing_cards then return end
+
+    local boosted = hex_iron_joker_owned()
+
+    for _, c in ipairs(G.playing_cards) do
+        if c.ability and c.config and c.config.center
+        and c.config.center.key == "m_steel" then
+            c.ability.h_x_mult = boosted and 3 or 1.5
+        end
+    end
+end
+
+local hex_old_update_iron_joker = Game.update
+
+function Game:update(dt)
+    hex_old_update_iron_joker(self, dt)
+    hex_apply_iron_joker_steel_boost()
+end
+
+SMODS.Joker{
+    key = "iron_joker",
+
+    loc_txt = {
+        name = "Iron Joker",
+        text = {
+            "{C:attention}Steel{} cards give",
+            "{X:mult,C:white}X3{} Mult instead of",
+            "{X:mult,C:white}X1.5{} Mult",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 1 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 2,             -- uncommon
+    cost = 6,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false, -- the effect lives in the Game:update poll above, gated on ownership directly, not in calculate()
+    eternal_compat = true,
+}
+
+
+
+
 SMODS.Joker{
     key = "hypergrowth",
 
     loc_txt = {
         name = "Hypergrowth",
         text = {
-            "Gives {C:purple}^1.01{} Mult and Chips",
+            "Gives {C:purple}^#1#{} Mult and Chips",
         }
     },
 
@@ -2521,11 +5264,23 @@ SMODS.Joker{
     blueprint_compat = true,
     eternal_compat = true,
 
+
+    config = {
+        extra = {
+            e_chips = big(1.1),
+            e_mult = big(1.1),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.e_chips } }
+    end,
+
     calculate = function(self, card, context)
         if context.joker_main then
             return {
-                e_mult = 1.01,
-                e_chips = 1.01,
+                e_mult = card.ability.extra.e_mult,
+                e_chips = card.ability.extra.e_chips,
             }
         end
     end,
@@ -2535,26 +5290,90 @@ SMODS.Joker{
 
 
 
+
+SMODS.Joker{
+    key = "blacksmith",
+
+    loc_txt = {
+        name = "Blacksmith",
+        text = {
+            "This Joker gains {X:mult,C:white}X#2#{} Mult",
+            "for every {C:attention}Steel{} card",
+            "triggered in your played hand",
+            "{C:inactive}(Currently {}{X:mult,C:white}X#1#{}{C:inactive} Mult){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 1 }, -- placeholder frame, move to an unused atlas slot before shipping
+    in_pool = hex_in_pool,
+    rarity = 2,             -- uncommon
+    cost = 6,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            Xmult = big(1),
+            Xmult_gain = big(0.25),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.Xmult, card.ability.extra.Xmult_gain } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            return {
+                Xmult = card.ability.extra.Xmult,
+                colour = G.C.MULT,
+            }
+        end
+
+        -- Every scored card carrying the Steel enhancement -- checked
+        -- via context.other_card.config.center.key, same as Bonus
+        -- Joker's own m_bonus check elsewhere in this file. Retriggered
+        -- Steel cards count more than once, same convention this file's
+        -- other per-card accumulators use.
+        if context.individual and context.cardarea == G.play and not context.blueprint then
+            if context.other_card.config.center.key == "m_steel" then
+                card.ability.extra.Xmult = card.ability.extra.Xmult:add(card.ability.extra.Xmult_gain)
+
+                return {
+                    message = localize("k_upgrade_ex"),
+                    colour = G.C.MULT,
+                }
+            end
+        end
+    end,
+}
+
+
+
 SMODS.Joker{
     key = "bonus_joker",
     loc_txt = {
         name = "Bonus Joker",
         text = {
-            "This Joker gains {X:mult,C:white}X0.25{} Mult",
+            "This Joker gains {X:mult,C:white}X#2#{} Mult",
             "every bonus card scored",
             "{C:inactive}(Currently {}{X:mult,C:white}X#1#{}{C:inactive} Mult)"
         }
     },
-    config = { extra = { Xmult = big(1), Xmult_gain = big(0.25) } },
+    config = { extra = { Xmult = big(1), Xmult_gain = big(0.2) } },
     atlas = "HexJokers",
-    pos = { x = 1, y = 0 }, -- second frame in the atlas (sprite to the right)
+    pos = { x = 3, y = 1 }, -- second frame in the atlas (sprite to the right)
     in_pool = hex_in_pool,
-    rarity = 3,             -- 1 common, 2 uncommon, 3 rare, 4 legendary
-    cost = 8,
+    rarity = 2,             -- 1 common, 2 uncommon, 3 rare, 4 legendary
+    cost = 7,
     unlocked = true,
     discovered = true,
     blueprint_compat = true,
     eternal_compat = true,
+    
 
     calculate = function(self, card, context)
         -- Apply the current Xmult when this joker scores
@@ -2578,9 +5397,17 @@ SMODS.Joker{
 
     -- Fills the #1# placeholder in the description text with the current Xmult
     loc_vars = function(self, info_queue, card)
-        return { vars = { card.ability.extra.Xmult } }
+        return { vars = { card.ability.extra.Xmult, card.ability.extra.Xmult_gain } }
     end,
 }
+
+
+
+
+
+
+
+
 
 SMODS.Joker{
     key = "trash_bin",
@@ -2637,7 +5464,8 @@ SMODS.Joker{
         if context.selling_card
         and context.card.ability
         and context.card.ability.set == "Joker"
-        and context.card.config.center.rarity == 3 then
+        and context.card.config.center.rarity == 3
+        and not context.blueprint then
 
             card.ability.extra.xmult =
                 card.ability.extra.xmult:mul(big(1.5))
@@ -2750,6 +5578,728 @@ SMODS.Joker{
     end,
 }
 
+
+-- Sheaf: creates 1 random Star card at the end of every round, via
+-- hex_get_star_centers() + explicit-key SMODS.create_card, same pattern
+-- Local Void uses for Black Hole cards (Star cards are this mod's own
+-- custom ConsumableType, shop_rate = 0, never naturally generated).
+-- blueprint_compat = true, with the same natural/Blueprint dual-stamp
+-- split Schwarzschild Radius uses -- Blueprint's copy call reuses this
+-- card's own `card` object (context.blueprint = <depth>, shared
+-- ability.extra table), so a single dedupe stamp would let only one
+-- firing (natural or first Blueprint) go through per round regardless
+-- of how many Blueprints are stacked.
+local function hex_sheaf_create_star_card()
+    G.E_MANAGER:add_event(Event({
+        trigger = "after",
+        delay = 0.2,
+        func = function()
+            if G.consumeables and #G.consumeables.cards < G.consumeables.config.card_limit then
+                local stars = hex_get_star_centers()
+
+                if #stars > 0 then
+                    local chosen = stars[math.random(#stars)]
+
+                    local new_card = SMODS.create_card({
+                        key = chosen.key,
+                        area = G.consumeables
+                    })
+
+                    G.consumeables:emplace(new_card)
+                end
+            end
+            return true
+        end
+    }))
+end
+
+
+-- Builds the eligible pool fresh each time (Rare-or-lower Jokers, i.e.
+-- rarity <= 3, so Legendary and any higher custom rarities are excluded)
+-- and creates one as a Negative copy. Same rarity-filtered pool pattern
+-- Andromeda/Big Crunch already use elsewhere in this file, respecting
+-- Showman for duplicates. No card_limit check, matching Proxima
+-- Centauri's own reasoning -- Negative Jokers don't count against the
+-- Joker slot limit in vanilla, so there's nothing to gate on.
+local function hex_fermi_method_create_joker()
+    local showman_owned = hex_owns_showman()
+
+    local pool = {}
+    for _, center in pairs(G.P_CENTERS) do
+        if center.set == "Joker"
+        and type(center.rarity) == "number"
+        and center.rarity <= 3 -- Rare (3) or lower
+        and (showman_owned or #SMODS.find_card(center.key) == 0) then
+            pool[#pool + 1] = center
+        end
+    end
+
+    if #pool == 0 then return end
+
+    G.E_MANAGER:add_event(Event({
+        trigger = "after",
+        delay = 0.2,
+        func = function()
+            local chosen = pool[math.random(#pool)]
+
+            local new_card = SMODS.create_card({
+                set = "Joker",
+                key = chosen.key,
+                area = G.jokers
+            })
+
+            new_card:set_edition({ negative = true }, true)
+
+            G.jokers:emplace(new_card)
+            new_card:add_to_deck()
+
+            card_eval_status_text(new_card, "extra", nil, nil, nil, {
+                message = "FERMI!",
+                colour = G.C.LEGENDARY,
+            })
+
+            return true
+        end
+    }))
+end
+
+SMODS.Joker{
+    key = "fermi_method",
+
+    loc_txt = {
+        name = "Fermi Method",
+        text = {
+            "Creates a random",
+            "{C:dark_edition}Negative{} Joker of",
+            "{C:attention}Rare{} rarity or lower",
+            "at the end of every round",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 4, y = 8 }, -- placeholder art slot, same as other undrawn Legendary Jokers
+    soul_pos = { x = 2, y = 9 }, -- placeholder Soul-card art slot
+
+    rarity = 4, -- Legendary
+    in_pool = hex_in_pool,
+    cost = 20,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            last_round = nil,
+            last_round_blueprint = {},
+        }
+    },
+
+    calculate = function(self, card, context)
+        if not context.end_of_round then return end
+
+        if context.blueprint then
+            if type(card.ability.extra.last_round_blueprint) ~= "table" then
+                card.ability.extra.last_round_blueprint = {}
+            end
+
+            local bp_card = context.blueprint_card
+            local bp_key = bp_card and (bp_card.sort_id or bp_card) or "unknown"
+
+            if card.ability.extra.last_round_blueprint[bp_key] ~= G.GAME.round then
+                card.ability.extra.last_round_blueprint[bp_key] = G.GAME.round
+                hex_fermi_method_create_joker()
+
+                return {
+                    message = "+1 Negative",
+                    colour = G.C.LEGENDARY,
+                }
+            end
+        else
+            if card.ability.extra.last_round ~= G.GAME.round then
+                card.ability.extra.last_round = G.GAME.round
+                hex_fermi_method_create_joker()
+
+                return {
+                    message = "+1 Negative",
+                    colour = G.C.LEGENDARY,
+                }
+            end
+        end
+    end,
+}
+
+
+-- Bernoulli Numbers: retriggers the joker immediately to this Joker's
+-- own left (its actual neighbor, not just "whatever's in the first
+-- slot") 3 extra times. Same retrigger_joker_check/retrigger_joker
+-- context Cryptid's Chad uses, gated behind SMODS's optional_features.
+-- retrigger_joker flag (added above in main.lua) -- without that flag
+-- enabled, this context never fires at all.
+local function hex_joker_left_neighbor(card)
+    if not (G.jokers and G.jokers.cards) then return nil end
+
+    for i, j in ipairs(G.jokers.cards) do
+        if j == card then
+            return G.jokers.cards[i - 1] -- nil if this joker is already leftmost (i == 1)
+        end
+    end
+
+    return nil
+end
+
+
+
+local function hex_joker_rightmost(card)
+    if not (G.jokers and G.jokers.cards) then return nil end
+
+    local rightmost = G.jokers.cards[#G.jokers.cards]
+
+    if rightmost == card then
+        return nil
+    end
+
+    return rightmost
+end
+
+
+SMODS.Joker{
+    key = "bernoulli_numbers",
+
+    loc_txt = {
+        name = "Bernoulli Numbers",
+        text = {
+            "Retriggers the {C:attention}rightmost{}",
+            "Joker {C:attention}3{} extra times",
+        }
+    },
+
+    config = {
+        extra = { retriggers = 3 },
+    },
+
+    atlas = "HexJokers", 
+    
+    pos = { x = 4, y = 8 }, -- placeholder art slot
+    soul_pos = { x = 2, y = 9 }, -- placeholder Soul-card art slot
+    
+    in_pool = hex_in_pool,
+    rarity = 4,             -- 1 common, 2 uncommon, 3 rare, 4 legendary
+    cost = 20,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.retriggers } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.retrigger_joker_check
+        and not context.retrigger_joker
+        and context.other_card ~= card then
+
+        
+
+            local rightmost = hex_joker_rightmost(card)
+
+            if rightmost and context.other_card == rightmost then
+                return {
+                    message = localize("k_again_ex"),
+                    repetitions = card.ability.extra.retriggers,
+                    card = card,
+                }
+            end
+        end
+    end,
+}
+
+
+
+-- Turning Machine: at the end of every Boss Blind, gives one random
+-- currently-owned Joker without an existing edition the Negative
+-- edition. Same end_of_round + G.GAME.blind.boss + per-round dedupe
+-- stamp Totem uses elsewhere in this file, so it only fires once per
+-- round even though end_of_round gets evaluated more than once during
+-- round-end scoring. Eligibility check mirrors hex_count_edition_jokers'
+-- own "j.edition" read elsewhere in this file -- a Joker with any
+-- edition already on it (Foil/Holo/Poly/Negative/etc) is skipped, so
+-- this can never waste itself overwriting an edition that's already
+-- there, and can never stack Negative onto the same Joker twice.
+local function hex_turning_machine_eligible_jokers()
+    if not (G.jokers and G.jokers.cards) then return {} end
+
+    local pool = {}
+    for _, j in ipairs(G.jokers.cards) do
+        if not j.edition then
+            pool[#pool + 1] = j
+        end
+    end
+
+    return pool
+end
+
+SMODS.Joker{
+    key = "turning_machine",
+
+    loc_txt = {
+        name = "Turning Machine",
+        text = {
+            "Gives {C:attention}1{} random Joker",
+            "without an {C:dark_edition}Edition{}",
+            "the {C:dark_edition}Negative{} Edition",
+            "at the end of every {C:attention}Boss Blind{}",
+        }
+    },
+
+    config = {
+        extra = {
+            last_round = nil,
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 4, y = 8 }, -- placeholder art slot
+    soul_pos = { x = 2, y = 9 },    
+    in_pool = hex_in_pool,
+    rarity = 4,             -- 1 common, 2 uncommon, 3 rare, 4 legendary
+    cost = 20,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false, -- the effect lives entirely in this specific card's own dedupe stamp/random pick, not in a per-scoring calculate a Blueprint copy could meaningfully mirror
+    eternal_compat = true,
+
+    calculate = function(self, card, context)
+        if context.end_of_round
+        and G.GAME.blind
+        and G.GAME.blind.boss
+        and not context.blueprint
+        and card.ability.extra.last_round ~= G.GAME.round then
+
+            card.ability.extra.last_round = G.GAME.round
+
+            local pool = hex_turning_machine_eligible_jokers()
+
+            if #pool > 0 then
+                local chosen = pool[math.random(#pool)]
+                chosen:set_edition({ negative = true }, true)
+
+                return {
+                    message = "Negative!",
+                    colour = G.C.LEGENDARY,
+                    card = chosen,
+                }
+            end
+        end
+    end,
+}
+
+-- Dirac Equation: when a Blind is selected, destroys your leftmost
+-- destroyable Joker (skipping Eternal/Immortal/Absolute via
+-- hex_huge_lqg_eligible_jokers, same as Huge LQG elsewhere in this
+-- file -- and skipping itself, so it can't destroy itself if it
+-- happens to be leftmost) and gives double that Joker's Hex-point
+-- worth. Uses the real hex_compute_sacrifice_gain(card)/
+-- hex_sacrifice_values pair from consumables.lua -- the same shared
+-- rarity->Hex-value calculation the manual Hex sacrifice button and
+-- Huge LQG both already go through -- rather than a separate table, so
+-- this automatically stays in sync with Laniakea/Cursed Deck/Monolith/
+-- Magic Studies bonuses the same way those two do. Deduped per round
+-- via last_round, same defensive stamp Russian Roulette uses elsewhere
+-- even for nominally one-shot-per-round contexts.
+--
+-- NOTE: this does NOT go through G.FUNCS.hex_sacrifice itself, so it
+-- does not trigger that button's own +$1-per-hex refund wrap -- that
+-- refund is specifically tied to the manual sacrifice action, not
+-- every source of Hex-point-for-destroying-a-Joker in the mod. Say the
+-- word if you want Dirac Equation to trigger that refund too.
+local function hex_dirac_leftmost_target(card)
+    local eligible = hex_huge_lqg_eligible_jokers()
+
+    for _, j in ipairs(eligible) do
+        if j ~= card then
+            return j
+        end
+    end
+
+    return nil
+end
+
+SMODS.Joker{
+    key = "dirac_equation",
+
+    loc_txt = {
+        name = "Dirac Equation",
+        text = {
+            "Destroys your {C:attention}leftmost{} Joker",
+            "when {C:attention}Blind{} is selected,",
+            "gives {C:purple}double{} its",
+            "{C:purple}Hex point{} worth",
+        }
+    },
+
+    config = {
+        extra = {
+            last_round = nil,
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 4, y = 8 }, 
+    soul_pos = { x = 2, y = 9 },
+    in_pool = hex_in_pool,
+    rarity = 4,             -- 1 common, 2 uncommon, 3 rare, 4 legendary
+    cost = 20,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false, -- the effect explicitly excludes context.blueprint below (same as Huge LQG's own boss-blind destroy roll), so a Blueprint copy would have nothing to trigger
+    eternal_compat = true,
+
+    calculate = function(self, card, context)
+        if context.setting_blind
+        and not context.blueprint
+        and card.ability.extra.last_round ~= G.GAME.round then
+
+            card.ability.extra.last_round = G.GAME.round
+
+            local target = hex_dirac_leftmost_target(card)
+
+            if target and not target.hex_being_hexed then
+                local gain = hex_compute_sacrifice_gain(target):mul(big(2))
+
+                if gain:gt(big(0)) then
+                    target.hex_being_hexed = true
+
+                    G.GAME.hex_points = (G.GAME.hex_points or big(0)):add(gain)
+
+                    G.E_MANAGER:add_event(Event({
+                        trigger = "after",
+                        delay = 0.1,
+                        func = function()
+                            target:start_dissolve()
+                            return true
+                        end
+                    }))
+
+                    return {
+                        message = "+" .. tostring(gain) .. " Hex",
+                        colour = G.C.HEX_ORPLE,
+                    }
+                end
+            end
+        end
+    end,
+}
+
+
+-- Schrödinger's Cat: retriggers two targets once each -- G.jokers.
+-- cards[1] (the literal leftmost Joker overall, same absolute-slot
+-- targeting Chad uses) and this Joker's own adjacent right neighbor
+-- (same relative-position lookup Bernoulli Numbers uses for its own
+-- left neighbor, mirrored to the other direction). Uses the same
+-- retrigger_joker_check/retrigger_joker context Bernoulli Numbers
+-- uses, gated behind the same optional_features.retrigger_joker flag
+-- already enabled in main.lua -- no further setup needed there.
+local function hex_joker_right_neighbor(card)
+    if not (G.jokers and G.jokers.cards) then return nil end
+
+    for i, j in ipairs(G.jokers.cards) do
+        if j == card then
+            return G.jokers.cards[i + 1] -- nil if this joker is already rightmost
+        end
+    end
+
+    return nil
+end
+
+SMODS.Joker{
+    key = "schrodingers_cat",
+
+    loc_txt = {
+        name = "Schrödinger's Cat",
+        text = {
+            "Retriggers your {C:attention}leftmost{} Joker",
+            "and the Joker to the",
+            "{C:attention}right{} of this Joker",
+            "{C:attention}1{} extra time each",
+        }
+    },
+
+    config = {
+        extra = { retriggers = 1 },
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 4, y = 8 }, -- placeholder art slot
+    soul_pos = { x = 2, y = 9 }, -- placeholder Soul-card art slot
+    in_pool = hex_in_pool,
+    rarity = 4,             -- 1 common, 2 uncommon, 3 rare, 4 legendary
+    cost = 20,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false,
+    eternal_compat = true,
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.retriggers } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.retrigger_joker_check
+        and not context.retrigger_joker
+        and context.other_card ~= card then
+
+            local leftmost = G.jokers and G.jokers.cards and G.jokers.cards[1]
+            local right_neighbor = hex_joker_right_neighbor(card)
+
+            if (leftmost and context.other_card == leftmost)
+            or (right_neighbor and context.other_card == right_neighbor) then
+
+                return {
+                    message = localize("k_again_ex"),
+                    repetitions = card.ability.extra.retriggers,
+                    card = card,
+                }
+            end
+        end
+    end,
+}
+
+
+SMODS.Joker{
+    key = "sheaf",
+
+    loc_txt = {
+        name = "Sheaf",
+        text = {
+            "Creates a random {C:star}Star{}",
+            "card at the end of every round",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 4, y = 8 }, -- placeholder art slot
+    soul_pos = { x = 2, y = 9 }, -- placeholder Soul-card art slot
+
+    rarity = 4,
+    in_pool = hex_in_pool,
+    cost = 20,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            last_round = nil,
+            last_round_blueprint = {},
+        }
+    },
+
+    calculate = function(self, card, context)
+        if not context.end_of_round then return end
+
+        if context.blueprint then
+            if type(card.ability.extra.last_round_blueprint) ~= "table" then
+                card.ability.extra.last_round_blueprint = {}
+            end
+
+            local bp_card = context.blueprint_card
+            local bp_key = bp_card and (bp_card.sort_id or bp_card) or "unknown"
+
+            if card.ability.extra.last_round_blueprint[bp_key] ~= G.GAME.round then
+                card.ability.extra.last_round_blueprint[bp_key] = G.GAME.round
+                hex_sheaf_create_star_card()
+
+                return {
+                    message = "+1 Star",
+                    colour = G.C.STAR,
+                }
+            end
+        else
+            if card.ability.extra.last_round ~= G.GAME.round then
+                card.ability.extra.last_round = G.GAME.round
+                hex_sheaf_create_star_card()
+
+                return {
+                    message = "+1 Star",
+                    colour = G.C.STAR,
+                }
+            end
+        end
+    end,
+}
+
+-- Monad: gains +0.1 Xchips and +0.1 Xmult permanently -- well, not
+-- permanently stored, but live-recomputed every scoring -- for every
+-- Hex point currently owned. Hex points are a big() OmegaNum value in
+-- this mod (see Soul Candle/Boykisser above), so the multiply goes
+-- through the big-number API. Base is 1 (so 0 Hex points = no bonus),
+-- same "1 + bonus" shape Boykisser uses for its own Xmult.
+SMODS.Joker{
+    key = "monad",
+
+    loc_txt = {
+        name = "Monad",
+        text = {
+            "Gains {X:chips,C:white}X#2#{} Chips and",
+            "{X:mult,C:white}X#2#{} Mult for every",
+            "{C:purple}Hex point{} owned",
+            "{C:inactive}(Currently {}{X:chips,C:white}X#1#{}{C:inactive} Chips,{}",
+            "{C:inactive}{}{X:mult,C:white}X#1#{}{C:inactive} Mult){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 4, y = 8 }, -- placeholder art slot
+    soul_pos = { x = 2, y = 9 }, -- placeholder Soul-card art slot, same as Boykisser above
+
+    rarity = 4,
+    in_pool = hex_in_pool,
+    cost = 20,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            Xmult_gain = big(0.1),
+        }
+    },
+
+    -- Shows the current live Xchips/Xmult (1 + hex_points x 0.1) in the
+    -- card's own text, computed the same way calculate() below applies
+    -- it. Guards G.GAME being nil since loc_vars can also be called
+    -- from the collection screen outside of a run.
+    loc_vars = function(self, info_queue, card)
+        local hex_points = (G.GAME and G.GAME.hex_points) or big(0)
+        local bonus = hex_points:mul(big(card.ability.extra.Xmult_gain))
+        local xstat = big(1):add(bonus)
+
+        return { vars = { xstat, card.ability.extra.Xmult_gain } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            local hex_points = G.GAME.hex_points or big(0)
+            local bonus = hex_points:mul(big(card.ability.extra.Xmult_gain))
+            local xstat = big(1):add(bonus)
+
+            return {
+                x_chips = xstat,
+                Xmult = xstat,
+            }
+        end
+    end,
+}
+
+-- Schwarzschild Radius: creates 2 Negative (vanilla) Black Hole spectral
+-- cards at the end of every round -- the actual base-game c_black_hole
+-- card that levels up every poker hand. blueprint_compat = true, so a
+-- Blueprint immediately to this Joker's left also triggers its own
+-- separate set of 2. Blueprint's copy call reuses this card's own
+-- `card` object (context.blueprint = true, same shared card.ability.extra
+-- table) rather than a distinct copy, so a single last_round stamp would
+-- have the natural firing and the Blueprint-copied firing block each
+-- other (whichever runs first marks the round and the other sees it as
+-- already-fired). Using two separate stamps -- last_round for the
+-- natural path, last_round_blueprint for the Blueprint-copied path --
+-- lets each dedupe against end_of_round's own multiple-fires-per-card
+-- quirk independently, so both still fire exactly once per round.
+local function hex_schwarzschild_create_black_holes()
+    for i = 1, 2 do
+        G.E_MANAGER:add_event(Event({
+            trigger = "after",
+            delay = 0.2 * i,
+            func = function()
+                if G.consumeables then
+                    local new_card = SMODS.create_card({
+                        key = "c_black_hole",
+                        area = G.consumeables
+                    })
+
+                    new_card:set_edition({ negative = true }, true)
+
+                    G.consumeables:emplace(new_card)
+                end
+                return true
+            end
+        }))
+    end
+end
+
+SMODS.Joker{
+    key = "schwarzschild_radius",
+
+    loc_txt = {
+        name = "Schwarzschild Radius",
+        text = {
+            "Creates {C:attention}2{} {C:dark_edition}Negative{}",
+            "{C:attention}Black Hole{} cards at",
+            "the end of every round",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 4, y = 8 }, -- placeholder art slot
+    soul_pos = { x = 2, y = 9 }, -- placeholder Soul-card art slot, same as Boykisser/Monad above
+
+    rarity = 4,
+    in_pool = hex_in_pool,
+    cost = 20,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            last_round = nil,
+            last_round_blueprint = {},
+        }
+    },
+
+    calculate = function(self, card, context)
+        if not context.end_of_round then return end
+
+        if context.blueprint then
+
+            if type(card.ability.extra.last_round_blueprint) ~= "table" then
+                card.ability.extra.last_round_blueprint = {}
+            end
+
+            local bp_card = context.blueprint_card
+            local bp_key = bp_card and (bp_card.sort_id or bp_card) or "unknown"
+
+            if card.ability.extra.last_round_blueprint[bp_key] ~= G.GAME.round then
+                card.ability.extra.last_round_blueprint[bp_key] = G.GAME.round
+                hex_schwarzschild_create_black_holes()
+
+                return {
+                    message = "+2 Negative",
+                    colour = G.C.SECONDARY_SET.Spectral,
+                }
+            end
+        else
+            if card.ability.extra.last_round ~= G.GAME.round then
+                card.ability.extra.last_round = G.GAME.round
+                hex_schwarzschild_create_black_holes()
+
+                return {
+                    message = "+2 Negative",
+                    colour = G.C.SECONDARY_SET.Spectral,
+                }
+            end
+        end
+    end,
+}
+
+
+
+
+
 SMODS.Joker{
     key = "green_screen",
     loc_txt = {
@@ -2795,6 +6345,17 @@ SMODS.Joker{
         return { vars = {card.ability.extra.Xmult_gain, card.ability.extra.Xmult } }
     end,
 }
+
+
+
+
+
+
+
+
+
+
+
 
 SMODS.Joker{
     key = "lemniscate",
@@ -2868,6 +6429,224 @@ SMODS.Joker{
         end
     end
 }
+
+
+SMODS.Joker{
+    key = "set_theory",
+
+    loc_txt = {
+        name = "Set Theory",
+        text = {
+            "Gives {C:mult}^#1#{} Mult and",
+            "{C:chips}^#1#{} Chips",
+            "Gains {C:attention}#2#{} power for",
+            "every {C:attention}Booster Pack{} opened",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 5, y = 0 }, -- placeholder art slot, same as other undrawn Mythic+ jokers
+    rarity = "hex_mythic",
+    in_pool = function(self) return false end, -- hidden/unlock-only, matching Overflow/Coupon/Final Form Jimbo above
+    cost = 200,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    -- e_mult/e_chips is the "^power" exponent-style bonus this file's
+    -- own Crystal/Ruby/Sapphire cards already use for their "^1.75" /
+    -- "^#1#" text -- plain Lua numbers, not big(), same as those. Starts
+    -- at 1 (^1 = no effect yet) and grows permanently from there.
+    config = {
+        extra = {
+            e_mult = big(1),
+            e_mult_gain = big(0.25),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.e_mult, card.ability.extra.e_mult_gain } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            return {
+                e_mult = card.ability.extra.e_mult,
+                e_chips = card.ability.extra.e_mult,
+            }
+        end
+
+        -- Same context.open_booster hook Receipt uses elsewhere in this
+        -- file for its own "every Booster Pack opened" trigger.
+        if context.open_booster and not context.blueprint then
+            card.ability.extra.e_mult = card.ability.extra.e_mult:add(card.ability.extra.e_mult_gain)
+
+            return {
+                message = localize("k_upgrade_ex"),
+                colour = G.C.MYTHIC,
+            }
+        end
+    end,
+}
+
+
+SMODS.Joker{
+    key = "khinchin",
+
+    loc_txt = {
+        name = "Khinchin's Constant",
+        text = {
+            "Takes Chips to the power of",
+            "Khinchin's constant",
+            "{C:inactive}(Khinchin's constant is roughly {}{C:attention}2.68545{}{C:inactive}){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 5, y = 0 }, -- placeholder art slot
+
+    rarity = "hex_mythic",
+    in_pool = function(self)
+        return false
+    end,    
+    cost = 606,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            return {
+                e_chips = big(2.68545),
+            }
+        end
+    end,
+}
+
+
+-- Aurora: raises both Chips and Mult to the power of (1 + 0.05 per
+-- dollar currently held), so 0 dollars = ^1 (no change), 20 dollars =
+-- ^2, etc. Live-computed from G.GAME.dollars every time it scores,
+-- same "fully dynamic, no stored/growing state" approach Juno uses for
+-- its own tetration height -- rises and falls immediately as your
+-- balance changes, rather than being a permanent stacking counter like
+-- Lemniscate's own exponent. G.GAME.dollars is a plain Lua number in
+-- this build (unlike Hex points), so this stays in plain arithmetic
+-- rather than going through the big() API.
+SMODS.Joker{
+    key = "aurora",
+
+    loc_txt = {
+        name = "Aurora",
+        text = {
+            "Raises {C:chips}Chips{} and {C:mult}Mult{}",
+            "to the power of {C:attention}^1{}, plus",
+            "{C:attention}^0.05{} per {C:money}$1{} held",
+            "{C:inactive}(Currently {}{C:attention}^#1#{}{C:inactive}){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 5, y = 0 },
+
+    rarity = "hex_mythic",
+    in_pool = function(self)
+        return false
+    end,
+
+    cost = 200,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    -- Shows the current live exponent (1 + dollars x 0.05, computed in
+    -- OmegaNum space) in the card's own text, computed the same way
+    -- calculate() below applies it. Guards G.GAME being nil since
+    -- loc_vars can also be called from the collection screen outside of
+    -- a run.
+    loc_vars = function(self, info_queue, card)
+        local dollars = to_big((G.GAME and G.GAME.dollars) or 0)
+        local exponent = big(1):add(dollars:mul(big(0.05)))
+
+        return { vars = { exponent } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            local dollars = to_big((G.GAME and G.GAME.dollars) or 0)
+            local exponent = big(1):add(dollars:mul(big(0.05)))
+
+            return {
+                e_chips = exponent,
+                e_mult = exponent,
+            }
+        end
+    end,
+}
+
+
+SMODS.Joker{
+    key = "hypercube",
+
+    loc_txt = {
+        name = "Hypercube",
+        text = {
+            "Gains {X:chips,C:white}^#2#{} Chips and",
+            "{X:mult,C:white}^#2#{} Mult for every",
+            "{C:purple}Hex point{} owned",
+            "{C:inactive}(Currently {}{X:chips,C:white}^#1#{}{C:inactive} Chips,{}",
+            "{C:inactive}{}{X:mult,C:white}^#1#{}{C:inactive} Mult){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 5, y = 0 }, -- placeholder art slot
+
+    rarity = "hex_mythic",
+    in_pool = function(self)
+        return false
+    end,    
+    cost = 606,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            e_mult_gain = big(0.1),
+        }
+    },
+
+    -- Shows the current live Xchips/Xmult (1 + hex_points x 0.1) in the
+    -- card's own text, computed the same way calculate() below applies
+    -- it. Guards G.GAME being nil since loc_vars can also be called
+    -- from the collection screen outside of a run.
+    loc_vars = function(self, info_queue, card)
+        local hex_points = (G.GAME and G.GAME.hex_points) or big(0)
+        local bonus = hex_points:mul(big(card.ability.extra.e_mult_gain))
+        local xstat = big(1):add(bonus)
+
+        return { vars = { xstat, card.ability.extra.e_mult_gain } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            local hex_points = G.GAME.hex_points or big(0)
+            local bonus = hex_points:mul(big(card.ability.extra.e_mult_gain))
+            local xstat = big(1):add(bonus)
+
+            return {
+                e_chips = xstat,
+                e_mult = xstat,
+            }
+        end
+    end,
+}
+
 
 SMODS.Joker{
     key = "overflow",
@@ -3097,7 +6876,223 @@ SMODS.Joker{
 }
 
 
--- Juno: raises final Mult by tetration (^^), with the tetration height
+
+
+
+
+
+
+
+
+
+
+SMODS.Joker{
+    key = "hamiltonian",
+
+    loc_txt = {
+        name = "Hamiltonian",
+        text = {
+            "Gains {C:chips}^0.25{} Chips when",
+            "selling a Joker with higher",
+            "rarity than Common",
+            "{C:inactive}(Currently {}{C:chips}^#1#{}{C:inactive} Chips){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 5, y = 0 }, -- placeholder art slot, same as other undrawn Mythic+ jokers
+
+    rarity = "hex_mythic",
+    in_pool = function(self)
+        return false -- hidden/unlock-only rarity, like the other Mythic+ jokers
+    end,
+
+    cost = 200,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            e_chips = big(1),
+            e_chips_gain = big(0.25),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.e_chips } }
+    end,
+
+    calculate = function(self, card, context)
+        -- Apply the exponent
+        if context.joker_main then
+            return {
+                e_chips = card.ability.extra.e_chips,
+                colour = G.C.CHIPS,
+            }
+        end
+
+        -- Detect selling a Joker with rarity above Common (rarity 1).
+        -- Same context.selling_card + context.card.ability.set == "Joker"
+        -- shape trash_bin uses for its own Rare-only check, just gated on
+        -- "not Common" (~= 1) instead of a single specific rarity, so any
+        -- Uncommon/Rare/Legendary/Mythic+ sale qualifies.
+        if context.selling_card
+        and context.card.ability
+        and context.card.ability.set == "Joker"
+        and context.card.config.center.rarity ~= 1
+        and not context.blueprint then
+
+            card.ability.extra.e_chips =
+                card.ability.extra.e_chips:add(card.ability.extra.e_chips_gain)
+
+            return {
+                message = localize("k_upgrade_ex"),
+                colour = G.C.MYTHIC,
+            }
+        end
+    end,
+}
+
+
+
+-- Cantor: gives its current award (starting at +50) in Hex points at the
+-- end of every round, then -- if that round was ended by defeating a
+-- Boss Blind -- permanently grows that award by +25 for all future
+-- rounds. Same end_of_round + per-card round-stamp dedupe that Totem/
+-- Overtime use elsewhere in this file (context.end_of_round fires
+-- multiple times per card in this build), combined with the same
+-- "apply current value, then permanently grow it" ordering Cubed Joker
+-- uses for its own Xchips. The payout for the boss round itself still
+-- uses the pre-growth award; the +25 takes effect starting the round
+-- after.
+SMODS.Joker{
+    key = "cantor",
+
+    loc_txt = {
+        name = "Cantor",
+        text = {
+            "Gives {C:purple}+#1#{} Hex points",
+            "at the end of every round",
+            "{C:purple}+#2#{} permanently at the",
+            "end of every {C:attention}Boss Blind{}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 5, y = 0 }, -- placeholder art slot, same as other undrawn Transcendental+ jokers
+
+    rarity = "hex_transcendental",
+    in_pool = function(self)
+        return false -- hidden/unlock-only rarity, like Juno/Endless Abyss above
+    end,
+
+    cost = 100000,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            award = big(50),
+            award_gain = big(25),
+            last_round = nil,
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return {
+            vars = {
+                card.ability.extra.award,
+                card.ability.extra.award_gain,
+            }
+        }
+    end,
+
+    calculate = function(self, card, context)
+        if context.end_of_round
+        and not context.blueprint
+        and card.ability.extra.last_round ~= G.GAME.round then
+
+            card.ability.extra.last_round = G.GAME.round
+
+            G.GAME.hex_points = (G.GAME.hex_points or big(0)):add(card.ability.extra.award)
+
+            local was_boss = G.GAME.blind and G.GAME.blind.boss
+
+            if was_boss then
+                card.ability.extra.award = card.ability.extra.award:add(card.ability.extra.award_gain)
+            end
+        end
+    end,
+}
+
+
+
+
+SMODS.Joker{
+    key = "aleph_null",
+
+    loc_txt = {
+        name = "Aleph Null",
+        text = {
+            "Gains {X:chips,C:white}^^#2#{} Chips and",
+            "{X:mult,C:white}^^#2#{} Mult for every",
+            "{C:purple}Hex point{} owned",
+            "{C:inactive}(Currently {}{X:chips,C:white}^^#1#{}{C:inactive} Chips,{}",
+            "{C:inactive}{}{X:mult,C:white}^^#1#{}{C:inactive} Mult){}",
+        },
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 5, y = 0 }, -- placeholder art slot
+
+    rarity = "hex_transcendental",
+    in_pool = function(self)
+        return false
+    end,    
+    cost = 246913578,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            ee_mult_gain = big(0.1),
+        }
+    },
+
+    -- Shows the current live Xchips/Xmult (1 + hex_points x 0.1) in the
+    -- card's own text, computed the same way calculate() below applies
+    -- it. Guards G.GAME being nil since loc_vars can also be called
+    -- from the collection screen outside of a run.
+    loc_vars = function(self, info_queue, card)
+        local hex_points = (G.GAME and G.GAME.hex_points) or big(0)
+        local bonus = hex_points:mul(big(card.ability.extra.ee_mult_gain))
+        local xstat = big(1):add(bonus)
+
+        return { vars = { xstat, card.ability.extra.ee_mult_gain } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            local hex_points = G.GAME.hex_points or big(0)
+            local bonus = hex_points:mul(big(card.ability.extra.ee_mult_gain))
+            local xstat = big(1):add(bonus)
+
+            return {
+                ee_chips = xstat,
+                ee_mult = xstat,
+            }
+        end
+    end,
+}
+
+
+-- Juno: raises Mult by tetration (^^), with the tetration height
 -- equal to the number of currently owned Jokers -- Juno counts itself,
 -- so 5 owned Jokers (Juno included) means the final Mult is raised to
 -- ^^5. Unlike Exponent Joker, this isn't a permanent stacking counter;
@@ -3124,8 +7119,8 @@ SMODS.Joker{
     in_pool = function(self)
         return false -- hidden/unlock-only rarity, like Aria/Overflow/Exponent Joker
     end,
-
-    cost = 100000,
+ 
+    cost = 203050,
     unlocked = true,
     discovered = true,
     blueprint_compat = true,
@@ -3138,7 +7133,7 @@ SMODS.Joker{
         return { vars = { height } }
     end,
 
-calculate = function(self, card, context)
+    calculate = function(self, card, context)
         -- Applied when Juno itself scores, in its actual position among
         -- the Joker slots (like Musa Acuminata's ^2), rather than being
         -- forced to the very end of scoring. Jokers to Juno's left have
@@ -3197,6 +7192,330 @@ SMODS.Joker{
 }
 
 
+
+SMODS.Joker{
+    key = "goodstein_sequence",
+
+    loc_txt = {
+        name = "Goodstein Sequence",
+        text = {
+            "Raises {C:mult}Mult{} and {C:chips}Chips{}",
+            "to the power of {C:transcendental}^^#1#{}",
+            "increases by {C:attention}1{}",
+            "at the end of every Blind",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 5, y = 0 }, -- placeholder art slot, same as other undrawn Mythic+/Transcendental jokers
+
+    rarity = "hex_transcendental",
+    in_pool = function(self) return false end, -- hidden/unlock-only, matching Endless Abyss above
+    cost = 30300303,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    -- ee_mult/ee_chips is this file's own "^^" (tetration) field pair --
+    -- same arrow(2, n) notation TON 618's own "^^^" pentation uses one
+    -- level up, and the same e_/ee_/eee_ naming Final Form Jimbo stacks
+    -- all three of at once. n starts at 1 (Mult^^1 = Mult, so the first
+    -- Blind is a no-op) and grows by exactly 1 permanently every Blind
+    -- from there.
+    config = {
+        extra = {
+            ee_mult_gain = big(1),
+            last_round = nil,
+            last_round_blueprint = {},
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.ee_mult_gain } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            return {
+                ee_mult = card.ability.extra.ee_mult_gain,
+                ee_chips = card.ability.extra.ee_mult_gain,
+            }
+        end
+
+        -- Grows n by 1 exactly once per Blind. Same natural/Blueprint
+        -- dual-stamp dedup Schwarzschild Radius uses elsewhere in this
+        -- file -- Blueprint copies share this card's own ability.extra
+        -- table, so a single stamp would have the natural firing and the
+        -- Blueprint-copied firing block each other.
+        if not context.end_of_round then return end
+
+        if context.blueprint then
+            if type(card.ability.extra.last_round_blueprint) ~= "table" then
+                card.ability.extra.last_round_blueprint = {}
+            end
+
+            local bp_card = context.blueprint_card
+            local bp_key = bp_card and (bp_card.sort_id or bp_card) or "unknown"
+
+            if card.ability.extra.last_round_blueprint[bp_key] ~= G.GAME.round then
+                card.ability.extra.last_round_blueprint[bp_key] = G.GAME.round
+                card.ability.extra.ee_mult_gain = card.ability.extra.ee_mult_gain:add(big(1))
+
+                return {
+                    message = localize("k_upgrade_ex"),
+                    colour = G.C.TRANSCENDENTAL,
+                }
+            end
+        else
+            if card.ability.extra.last_round ~= G.GAME.round then
+                card.ability.extra.last_round = G.GAME.round
+                card.ability.extra.ee_mult_gain = card.ability.extra.ee_mult_gain:add(big(1))
+
+                return {
+                    message = localize("k_upgrade_ex"),
+                    colour = G.C.TRANSCENDENTAL,
+                }
+            end
+        end
+    end,
+}
+
+
+
+-- Creates `count` random Negative cards from a given center pool,
+-- staggered so their materialize animations don't all overlap -- same
+-- staggered create+force-Negative shape Virgo Cluster/Big Bang use
+-- elsewhere in this file. No consumable-slot-limit check, matching
+-- Virgo Cluster's own precedent.
+-- Self-contained pool builder (doesn't depend on consumables.lua's own
+-- hex_get_nebula_centers/hex_get_galaxy_centers/hex_get_star_centers,
+-- which turned out to be `local` to that file and therefore invisible
+-- from jokers.lua) -- scans G.P_CENTERS directly for the same lowercase
+-- `set` keys those consumables are registered under elsewhere in this
+-- mod (e.g. SMODS.Consumable{ set = "galaxy", ... }).
+local function hex_cpt_symmetry_get_centers(set_key)
+    local out = {}
+    for _, center in pairs(G.P_CENTERS) do
+        if center.set == set_key then
+            out[#out + 1] = center
+        end
+    end
+    return out
+end
+
+local function hex_cpt_symmetry_summon_from_pool(centers, count)
+    if #centers == 0 then return end
+
+    for i = 1, count do
+        G.E_MANAGER:add_event(Event({
+            trigger = "after",
+            delay = 0.15 * i,
+            func = function()
+                local chosen = centers[math.random(#centers)]
+
+                local new_card = SMODS.create_card({
+                    key = chosen.key,
+                    area = G.consumeables
+                })
+
+                new_card:set_edition({ negative = true }, true)
+
+                G.consumeables:emplace(new_card)
+
+                return true
+            end
+        }))
+    end
+end
+
+local function hex_cpt_symmetry_summon_all()
+    hex_cpt_symmetry_summon_from_pool(hex_cpt_symmetry_get_centers("nebula"), 1)
+    hex_cpt_symmetry_summon_from_pool(hex_cpt_symmetry_get_centers("galaxy"), 2)
+    hex_cpt_symmetry_summon_from_pool(hex_cpt_symmetry_get_centers("star"), 5)
+end
+
+SMODS.Joker{
+    key = "cpt_symmetry",
+
+    loc_txt = {
+        name = "CPT Symmetry",
+        text = {
+            "Creates {C:attention}1{} {C:dark_edition}Negative{}",
+            "{C:nebula}Nebula{} card,",
+            "{C:attention}2{} {C:dark_edition}Negative{} {C:galaxy}Galaxy{} cards,",
+            "and {C:attention}5{} {C:dark_edition}Negative{} {C:star}Star{} cards",
+            "at the end of every round",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 5, y = 0 }, -- placeholder art slot, same as other undrawn Mythic+/Transcendental jokers
+
+    rarity = "hex_transcendental",
+    in_pool = function(self) return false end, -- hidden/unlock-only, matching Goodstein Sequence/Endless Abyss above
+    cost = 10203040,
+    unlocked = true,
+    discovered =true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            last_round = nil,
+            last_round_blueprint = {},
+        }
+    },
+
+    calculate = function(self, card, context)
+        if not context.end_of_round then return end
+
+        -- Same natural/Blueprint dual-stamp dedup Schwarzschild
+        -- Radius/Goodstein Sequence use elsewhere in this file.
+        if context.blueprint then
+            if type(card.ability.extra.last_round_blueprint) ~= "table" then
+                card.ability.extra.last_round_blueprint = {}
+            end
+
+            local bp_card = context.blueprint_card
+            local bp_key = bp_card and (bp_card.sort_id or bp_card) or "unknown"
+
+            if card.ability.extra.last_round_blueprint[bp_key] ~= G.GAME.round then
+                card.ability.extra.last_round_blueprint[bp_key] = G.GAME.round
+                hex_cpt_symmetry_summon_all()
+
+                return {
+                    message = "+8 Negative",
+                    colour = G.C.TRANSCENDENTAL,
+                }
+            end
+        else
+            if card.ability.extra.last_round ~= G.GAME.round then
+                card.ability.extra.last_round = G.GAME.round
+                hex_cpt_symmetry_summon_all()
+
+                return {
+                    message = "+8 Negative",
+                    colour = G.C.TRANSCENDENTAL,
+                }
+            end
+        end
+    end,
+}
+
+
+
+
+
+
+
+
+
+
+
+
+SMODS.Joker{
+    key = "final_form_jimbo",
+
+    loc_txt = {
+        name = "Final Form Jimbo",
+        text = {
+            "Gives {C:mult}+4{}, {X:mult,C:white}X4{}, {C:mult}^4{}, {C:mult}^^4{},",
+            "and {C:mult}^^^4{} Mult",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 3, y = 8 }, -- placeholder art slot
+    soul_pos = { x = 7, y = 9 },
+
+    rarity = "hex_divine",
+    in_pool = function(self)
+        return false
+    end,    
+    cost = big(2e100),
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false,
+    eternal_compat = true,
+
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            return {
+                mult = 4,
+                Xmult = 4,
+                e_mult = 4,
+                ee_mult = 4,
+                eee_mult = 4,
+            }
+        end
+    end,
+}
+
+
+
+SMODS.Joker{
+    key = "aleph_omega",
+
+    loc_txt = {
+        name = "Aleph Omega",
+        text = {
+            "Gains {X:chips,C:white}^^^#2#{} Chips and",
+            "{X:mult,C:white}^^^#2#{} Mult for every",
+            "{C:purple}Hex point{} owned",
+            "{C:inactive}(Currently {}{X:chips,C:white}^^^#1#{}{C:inactive} Chips,{}",
+            "{C:inactive}{}{X:mult,C:white}^^^#1#{}{C:inactive} Mult){}",
+        },
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 5, y = 0 }, -- placeholder art slot
+
+    rarity = "hex_divine",
+    in_pool = function(self)
+        return false
+    end,    
+    cost = big(2e100),
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            eee_mult_gain = big(0.1),
+        }
+    },
+
+    -- Shows the current live Xchips/Xmult (1 + hex_points x 0.1) in the
+    -- card's own text, computed the same way calculate() below applies
+    -- it. Guards G.GAME being nil since loc_vars can also be called
+    -- from the collection screen outside of a run.
+    loc_vars = function(self, info_queue, card)
+        local hex_points = (G.GAME and G.GAME.hex_points) or big(0)
+        local bonus = hex_points:mul(big(card.ability.extra.eee_mult_gain))
+        local xstat = big(1):add(bonus)
+
+        return { vars = { xstat, card.ability.extra.eee_mult_gain } }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            local hex_points = G.GAME.hex_points or big(0)
+            local bonus = hex_points:mul(big(card.ability.extra.eee_mult_gain))
+            local xstat = big(1):add(bonus)
+
+            return {
+                eee_chips = xstat,
+                eee_mult = xstat,
+            }
+        end
+    end,
+}
+
+
+
 SMODS.Joker{
     key = "oracle",
 
@@ -3214,7 +7533,7 @@ SMODS.Joker{
     atlas = "HexJokers",
     pos = { x = 5, y = 0 }, -- placeholder art slot shared with the other undrawn Divine/Transcendental jokers
 
-    cost = 1e100,
+    cost = 2e100,
     unlocked = true,
     discovered = true,
     blueprint_compat = false,
@@ -3239,12 +7558,51 @@ SMODS.Joker{
     atlas = "HexJokers",
     pos = { x = 5, y = 0 }, -- placeholder art slot shared with the other undrawn Divine/Transcendental jokers
 
-    cost = 1e100,
+    cost = 2e100,
     unlocked = true,
     discovered = true,
     blueprint_compat = false,
     eternal_compat = true,
 }
+
+
+
+SMODS.Joker{
+    key = "rayo_number",
+
+    loc_txt = {
+        name = "Rayo's Number",
+        text = {
+            "Gives {C:mult}^^^^1.1{} and {C:chips}^^^^1.1{}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 5, y = 0 }, -- placeholder art slot
+
+    rarity = "hex_divine",
+    in_pool = function(self)
+        return false
+    end,    
+    cost = big(2e100),
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false,
+    eternal_compat = true,
+
+
+    calculate = function(self, card, context)
+        if context.joker_main then
+            
+            return {
+                hyper_mult = { 4, 1.1 },
+                hyper_chips = { 4, 1.1 },
+            }
+        end
+    end,
+}
+
+
 
 SMODS.Joker{
     key = "inaccessible",

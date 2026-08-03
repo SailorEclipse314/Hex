@@ -7328,6 +7328,13 @@ local function hex_to_plain_number(value)
     return n or 0
 end
 
+
+
+
+
+local HEX_ABSOLUTE_LEVEL_CAP = big(1e303)
+
+
 -- Absolute: while owned, the Chips/Mult operator's hyperoperator level is
 -- boosted 1-for-1 by however many Hex points you currently have, stacking
 -- on top of whatever level Hyperbolic has permanently bought. Unlike
@@ -7338,7 +7345,7 @@ local function hex_absolute_bonus_level()
     if not (SMODS.find_card and G.GAME) then return 0 end
     if #SMODS.find_card("j_" .. mod.prefix .. "_absolute") == 0 then return 0 end
 
-    local points = hex_to_plain_number(G.GAME.hex_points or 0)
+    local points = (G.GAME.hex_points or big(0)):min(HEX_ABSOLUTE_LEVEL_CAP)
     if points <= 0 then return 0 end
 
     return math.floor(points)
@@ -7350,7 +7357,8 @@ if SMODS.Scoring_Calculation then
     hex_hyperbolic_calc = SMODS.Scoring_Calculation{
         key = "hex_hyperbolic",
         func = function(self, chips, mult, flames)
-            local level = ((G.GAME and G.GAME.hex_hyperbolic_level) or 0) + hex_absolute_bonus_level()
+            local level = ((G.GAME and G.GAME.hex_hyperbolic_level) or 0) + 
+            hex_absolute_bonus_level()
 
             if level <= 0 then
                 -- Not yet upgraded (shouldn't normally be reached, since we
@@ -9000,12 +9008,33 @@ SMODS.Consumable{
         end
 
         if #legendaries > 0 then
+            -- Tracks Legendary keys this specific Big Crunch use has already
+            -- granted, so the 2nd/3rd picks can't land on the same one the
+            -- 1st already gave (without Showman) -- none of the 3 cards
+            -- exist yet at the moment `legendaries` above was built, so
+            -- nothing else prevents that otherwise.
+            local already_picked = {}
+
             for i = 1, 3 do
                 G.E_MANAGER:add_event(Event({
                     trigger = "after",
                     delay = 0.2 * i,
                     func = function()
-                        local chosen = legendaries[math.random(#legendaries)]
+                        local pool = legendaries
+
+                        if not showman_owned then
+                            pool = {}
+                            for _, center in ipairs(legendaries) do
+                                if not already_picked[center.key] then
+                                    pool[#pool + 1] = center
+                                end
+                            end
+                        end
+
+                        if #pool == 0 then return true end
+
+                        local chosen = pool[math.random(#pool)]
+                        already_picked[chosen.key] = true
 
                         local new_card = SMODS.create_card({
                             set = "Joker",
@@ -9226,6 +9255,7 @@ HEX_ENTROPY_SCORE_PATTERNS = {
     "^x_chips$",
     "^x_mult$",
     "xmult$",       -- catches Xmult, xmult, custom_xmult, etc.
+    "xchips$",      -- catches Xchips, xchips, custom_xchips, etc.
     "^exponent$",
     "exponent$",     -- catches this mod's own `extra.exponent` fields
     "^power$",
@@ -10107,7 +10137,8 @@ function Game:update(dt)
             -- had never been here.
             local pinwheel_bonus = G.GAME.hex_pinwheel_bonus_limit or 0
             local reach_bonus = G.GAME.hex_reach_bonus_limit or 0
-            G.hand.config.highlighted_limit = HEX_POLY_DEFAULT_HAND_LIMIT + pinwheel_bonus + reach_bonus
+            local mandelbrot_bonus = (SMODS.find_card and #SMODS.find_card("j_" .. mod.prefix .. "_mandelbrot_set") * 2) or 0
+            G.hand.config.highlighted_limit = HEX_POLY_DEFAULT_HAND_LIMIT + pinwheel_bonus + reach_bonus + mandelbrot_bonus
         end
     end
 
@@ -10356,7 +10387,26 @@ G.FUNCS.hex_sacrifice = function(e)
     end
 end
 
+local hex_old_hex_sacrifice_infestation = G.FUNCS.hex_sacrifice
 
+G.FUNCS.hex_sacrifice = function(e)
+    local card = e.config.ref_table
+    local was_already_hexed = card and card.hex_being_hexed
+
+    hex_old_hex_sacrifice_infestation(e)
+
+    if card and card.hex_being_hexed and not was_already_hexed then
+        if G.jokers and G.jokers.cards then
+            for _, j in ipairs(G.jokers.cards) do
+                if j.config and j.config.center
+                and j.config.center.key == ("j_" .. mod.prefix .. "_infestation") then
+
+                    j.ability.extra.hexed_count = (j.ability.extra.hexed_count or big(0)):add(big(1))
+                end
+            end
+        end
+    end
+end
 
 
 

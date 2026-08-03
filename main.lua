@@ -12,6 +12,7 @@ mod.badge_colour = HEX("1E3A8A")
 mod.optional_features = {
     quantum = true,
     object_weights = true,
+    retrigger_joker = true,
 }
 
 -- Amulet (Talisman-compatible) big-number support.

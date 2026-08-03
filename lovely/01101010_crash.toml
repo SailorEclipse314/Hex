@@ -1,0 +1,27 @@
+[manifest]
+version = "1.0.0"
+
+[[patches]]
+[patches.copy]
+target = "main.lua"
+position = "append"
+payload = """
+local hex_01101010_old_love_update = love.update
+
+function love.update(dt)
+    if HEX_01101010_SHOULD_CRASH then
+        HEX_01101010_SHOULD_CRASH = false
+        print("01101010: crash flag seen")
+        local ok, ffi = pcall(require, "ffi")
+        print("01101010: require('ffi') ok =", ok, ffi)
+        if ok and ffi then
+            print("01101010: about to dereference null pointer")
+            local p = ffi.cast("int*", 0)
+            p[0] = 1
+            print("01101010: survived the dereference (this should be unreachable)")
+        end
+    end
+
+    hex_01101010_old_love_update(dt)
+end
+"""

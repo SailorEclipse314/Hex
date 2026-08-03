@@ -873,7 +873,7 @@ SMODS.Enhancement{
     loc_txt = {
         name = "Crystal Card",
         text = {
-            "{C:green}1 in 2{} chance to give",
+            "{C:green}#1# in 2{} chance to give",
             "{C:chips}^1.75{} Chips and",
             "{C:mult}^1.75{} Mult",
             "when scored",
@@ -886,9 +886,13 @@ SMODS.Enhancement{
     weight = 0,
     in_pool = function(self) return true end,
 
+    loc_vars = function(self, info_queue, card)
+        return { vars = { G.GAME.probabilities.normal or 1 } }
+    end,
+
     calculate = function(self, card, context)
         if context.main_scoring and context.cardarea == G.play then
-            if pseudorandom(pseudoseed(mod.prefix .. "_crystal_" .. tostring(card.sort_id or card))) < 0.5 then
+            if pseudorandom(pseudoseed(mod.prefix .. "_crystal_" .. tostring(card.sort_id or card))) < G.GAME.probabilities.normal / 2 then
                 return {
                     e_chips = 1.75,
                     e_mult = 1.75,
@@ -1892,7 +1896,7 @@ end
 -- Colour used for the Immortal sticker's badge/description text, the
 -- same way G.C.HEX_ORANGE_SEAL/HEX_GREEN_SEAL/HEX_PINK_SEAL/
 -- HEX_BLACK_SEAL were defined above for their respective Seals.
-G.C.HEX_IMMORTAL = HEX("E8E8E8")
+G.C.HEX_IMMORTAL = HEX("7D7D7D")
 
 -- The full, mod-prefixed key this sticker is actually stored/checked
 -- under on a card's `ability` table (card.ability[HEX_IMMORTAL_STICKER_KEY]).
@@ -1917,6 +1921,7 @@ SMODS.Sticker{
 
     loc_txt = {
         name = "Immortal",
+        label = "Immortal",
         text = {
             "This card can",
             "{C:attention}never{} be destroyed",
@@ -1981,6 +1986,13 @@ end
 -- Clearance Sale/Liquidation, etc.) use.
 HEX_SOUL_CENTER_KEY = "c_soul" -- vanilla's own Soul card
 HEX_HEART_CENTER_KEY = "c_" .. mod.prefix .. "_heart"
+
+do
+    local soul_center = G.P_CENTERS[HEX_SOUL_CENTER_KEY]
+    if soul_center and not soul_center.soul_rate then
+        soul_center.soul_rate = 0.003
+    end
+end
 
 SMODS.Voucher{
     key = "legendary_soul",
@@ -2825,21 +2837,39 @@ function create_card(_type, area, legendary, _rarity, skip_materialize, soulable
         end
     end
 
-
-    -- Heart: soul_rate/soul_set alone isn't reliably picked up by this
-    -- build's own soul-injection logic (same category of issue Star/Galaxy
-    -- cards work around by being force-injected here instead of trusting a
-    -- similar automatic mechanism) -- so Heart gets the same manual
-    -- injection treatment. Uses the center's own soul_rate field directly
-    -- as the roll chance, so Mythic Heart's voucher (which multiplies that
-    -- same field) still scales it correctly.
     if (_type == "Spectral" or _type == "Tarot")
     and area == G.pack_cards
     and not forced_key then
+        local soul_center = G.P_CENTERS[HEX_SOUL_CENTER_KEY]
         local heart_center = G.P_CENTERS[HEX_HEART_CENTER_KEY]
-        if heart_center and heart_center.soul_rate
-        and pseudorandom(pseudoseed(mod.prefix .. "_heart_soul")) < heart_center.soul_rate then
-            forced_key = HEX_HEART_CENTER_KEY
+
+        if soul_center and not soul_center.soul_rate then
+            soul_center.soul_rate = 0.003
+        end
+
+        local soul_rate = (soul_center and soul_center.soul_rate) or 0
+        local heart_rate = (heart_center and heart_center.soul_rate) or 0
+        local combined = soul_rate + heart_rate
+
+        if combined > 0 then
+            local roll = pseudorandom(pseudoseed(mod.prefix .. "_soul_heart_roll"))
+
+            if combined >= 1 then
+                -- Both are boosted past "guaranteed" -- split the slot
+                -- between them in proportion to their own rates instead
+                -- of letting whichever is checked first win every time.
+                if roll < soul_rate / combined then
+                    forced_key = HEX_SOUL_CENTER_KEY
+                else
+                    forced_key = HEX_HEART_CENTER_KEY
+                end
+            else
+                if roll < soul_rate then
+                    forced_key = HEX_SOUL_CENTER_KEY
+                elseif roll < combined then
+                    forced_key = HEX_HEART_CENTER_KEY
+                end
+            end
         end
     end
 
