@@ -4090,7 +4090,7 @@ SMODS.Joker{
         name = "01101010",
         text = {
             "Gives {C:mult}+100{} Mult",
-            "{C:red}Destroys{} itself if you have",
+            "{C:red}Crashs{} the game if you have",
             "more than {C:attention}3{} Jokers",
         }
     },
@@ -7364,16 +7364,6 @@ SMODS.Joker{
 -- remove_from_deck lifecycle pair Open Market uses for its own
 -- persistent global bonus, applied once regardless of how the card
 -- enters/leaves your Jokers.
---
--- CAVEAT: this SETS the global rather than multiplying it, storing
--- only its own prior snapshot to restore on removal. If another
--- probability-boosting effect (like Oops All 6s) changes
--- probabilities.normal while Lagrangian is also owned, removing
--- Lagrangian will restore Lagrangian's own pre-ownership snapshot and
--- silently discard whatever that other effect had changed it to in the
--- meantime. Selling Lagrangian while also stacking Oops All 6s is the
--- one case where this can misbehave -- flag it if that combo needs
--- exact stacking behavior instead.
 SMODS.Joker{
     key = "lagrangian",
 
@@ -7404,12 +7394,12 @@ SMODS.Joker{
 
     add_to_deck = function(self, card, from_debuff)
         G.GAME.probabilities = G.GAME.probabilities or {}
-        G.GAME.probabilities.normal = (G.GAME.probabilities.normal or 1) * 100
+        G.GAME.probabilities.normal = (G.GAME.probabilities.normal or 1) * 1000
     end,
 
     remove_from_deck = function(self, card, from_debuff)
         if G.GAME.probabilities then
-            G.GAME.probabilities.normal = (G.GAME.probabilities.normal or 100) / 100
+            G.GAME.probabilities.normal = (G.GAME.probabilities.normal or 1000) / 1000
         end
     end,
 }
@@ -7504,6 +7494,63 @@ SMODS.Joker{
         end
     end,
 }
+
+
+
+-- Exponential Factorial: reads G.GAME.hex_live_mult (same mirror the
+-- mod_mult hook in main.lua maintains for Ackermann Function above) --
+-- the running Mult right before this card's own position, including
+-- every Joker to its left. Only triggers when that Mult is above 5,
+-- where 10^^(n - 2.2787667783) is a close approximation of the true
+-- exponential factorial sequence. 10:arrow(2, x) is tetration (10^^x),
+-- the same arrow(2, n) operator this file's own ee_mult/ee_chips fields
+-- use elsewhere, just with a fractional height here rather than an
+-- integer one. Same "return f(x)/x as Xmult" trick Ackermann/Gamma/Zeta
+-- use to replace the running stat with f(x) regardless of what's
+-- already been applied by Jokers to the left.
+SMODS.Joker{
+    key = "exponential_factorial",
+
+    loc_txt = {
+        name = "Exponential Factorial",
+        text = {
+            "Takes the {C:attention}exponential factorial{} of Mult",
+            "{C:inactive}(10^^(n - 2.2787667783)){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 5, y = 0 }, -- placeholder art slot, same as other undrawn Transcendental+ jokers
+    rarity = "hex_transcendental",
+    in_pool = function(self)
+        return false -- hidden/unlock-only rarity, like Cantor/Jokeo/Einstein above
+    end,
+
+    cost = 100000,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false, -- reads the live running Mult directly; a Blueprint copy would read from ITS OWN position in the row, a different snapshot, so it's excluded below
+    eternal_compat = true,
+
+    calculate = function(self, card, context)
+        if context.joker_main and not context.blueprint then
+            local n = (G.GAME and G.GAME.hex_live_mult) or big(1)
+
+            local height = n:sub(big(2.2787667783))
+            local fx = big(10):arrow(2, height)
+            local xmult = fx:div(n)
+
+            return {
+                Xmult = xmult,
+                message = "=" .. tostring(fx),
+                colour = G.C.MULT,
+            }
+        end
+    end,
+}
+
+
+
 
 
 -- Cantor: gives its current award (starting at +50) in Hex points at the
