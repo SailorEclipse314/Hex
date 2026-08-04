@@ -7728,10 +7728,16 @@ function hex_amplifier_rewrite(card, snapshot, a)
                 if entry.rate_key then
                     local next_step = a:arrow(1, n:add(big(1))):sub(a:arrow(1, n))
 
+                    print("AMPLIFIER n=" .. tostring(n) .. " a=" .. tostring(a)
+                        .. " next_step=" .. tostring(next_step)
+                        .. " base=" .. tostring(entry.base)) -- TEMP DEBUG
+
                     if next_step:gt(big(0)) then
-                        s.tbl[entry.rate_key] = hex_singularity_lenient(
-                            to_big(entry.base):mul(next_step)
-                        )
+                        local written = to_big(entry.base):mul(next_step)
+                        print("AMPLIFIER writing " .. tostring(written) .. " to " .. tostring(entry.rate_key)) -- TEMP DEBUG
+                        s.tbl[entry.rate_key] = hex_singularity_lenient(written)
+                    else
+                        print("AMPLIFIER next_step NOT > 0, skipping write") -- TEMP DEBUG
                     end
                 else
                     local step
@@ -7789,17 +7795,25 @@ function Game:update(dt)
                 return hex_old_calculate_joker_amplifier(self, context)
             end
 
+            local ok, err = pcall(function()
+                local a = hex_amplifier_a()
 
-            local a = hex_amplifier_a()
+                local snapshot = {}
+                hex_singularity_collect(self.ability, 1, "", snapshot)
 
-            local snapshot = {}
-            hex_singularity_collect(self.ability, 1, "", snapshot)
+                local ret = hex_old_calculate_joker_amplifier(self, context)
 
-            local ret = hex_old_calculate_joker_amplifier(self, context)
+                hex_amplifier_rewrite(self, snapshot, a)
 
-            hex_amplifier_rewrite(self, snapshot, a)
+                return ret
+            end)
 
-            return ret
+            if not ok then
+                print("AMPLIFIER ERROR: " .. tostring(err)) -- TEMP DEBUG
+                return hex_old_calculate_joker_amplifier(self, context)
+            end
+
+            return ok and err -- pcall's second return is the wrapped function's return value when ok
         end
     end
 
