@@ -5895,6 +5895,33 @@ SMODS.Joker{
     end,
 }
 
+SMODS.Joker{
+    key = "coupon",
+
+    loc_txt = {
+        name = "Coupon",
+        text = {
+            "Rerolls in the shop",
+            "always cost {C:money}$1{}"
+        }
+    },
+
+    rarity = 4,
+    in_pool = hex_in_pool,
+
+    atlas = "HexJokers",
+    pos = { x = 4, y = 8 }, 
+    soul_pos = { x = 2, y = 9 }, -- placeholder art slot, same as other undrawn Mythic+ jokers
+
+    cost = 20,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false,
+    eternal_compat = true,
+}
+
+
+
 -- Dirac Equation: when a Blind is selected, destroys your leftmost
 -- destroyable Joker (skipping Eternal/Immortal/Absolute via
 -- hex_huge_lqg_eligible_jokers, same as Huge LQG elsewhere in this
@@ -6603,6 +6630,68 @@ SMODS.Joker{
 }
 
 
+
+
+-- Zeta Function: reads G.GAME.hex_live_chips (mirrored by the
+-- mod_chips() hook in main.lua) -- the running Chips right before this
+-- card's own position, including every Joker to its left -- runs it
+-- through 2^x / (1 + (2/3)^x + (2/4)^x + (4/9)^x), then returns the
+-- result divided by x as Xchip_mod. Same "replace the running stat with
+-- f(x) regardless of what's already been applied" trick Ackermann
+-- Function above uses for Mult, just for Chips via Xchip_mod (the same
+-- multiplicative Chips key Pokémon Card uses elsewhere in this file)
+-- instead of Xmult.
+SMODS.Joker{
+    key = "zeta_function",
+
+    loc_txt = {
+        name = "Zeta Function",
+        text = {
+            "Takes {C:attention}1/(zeta(chips)-1){} of chips",
+            "where {C:attention}zeta(x){} is the Riemann zeta function",
+            "{C:inactive}(f(x) = 2^x / (1+(2/3)^x +(2/4)^x+(4/9)^x)){}",
+        },
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 5, y = 0 }, -- placeholder art slot, same as other undrawn Mythic+ jokers
+    rarity = "hex_mythic",
+    in_pool = function(self) return false end, -- hidden/unlock-only rarity, like other Mythic+ jokers
+
+    cost = 200,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false, -- reads the live running Chips directly; a Blueprint copy would read from ITS OWN position in the row, a different snapshot, so it's excluded below
+    eternal_compat = true,
+
+    calculate = function(self, card, context)
+        if context.joker_main and not context.blueprint then
+            local x = (G.GAME and G.GAME.hex_live_chips) or big(1)
+
+            if x:gt(big(0)) then
+                local base1 = big(2):div(big(3))
+                local base2 = big(2):div(big(4))
+                local base3 = big(4):div(big(9))
+
+                local numerator = big(2):arrow(1, x)
+                local denominator = big(1)
+                    :add(base1:arrow(1, x))
+                    :add(base2:arrow(1, x))
+                    :add(base3:arrow(1, x))
+
+                local fx = numerator:div(denominator)
+                local xchips = fx:div(x)
+
+                return {
+                    Xchip_mod = xchips,
+                    message = "X" .. tostring(xchips),
+                    colour = G.C.CHIPS,
+                }
+            end
+        end
+    end,
+}
+
 -- Lorenz Attractor: every hand played, randomly picks ONE of four
 -- effects to apply -- ^5 Mult, ^5 Chips, +$5000, or +50 Hex points.
 -- Uses the same pseudorandom_element(pool, pseudoseed(key)) pattern
@@ -7135,29 +7224,63 @@ G.FUNCS.can_discard = function(e)
     end
 end
 
+
+-- Gamma Function: reads G.GAME.hex_live_mult (same mirror the mod_mult
+-- hook in main.lua already maintains for Ackermann Function above) --
+-- the running Mult right before this card's own position, including
+-- every Joker to its left -- runs it through
+-- 2.5 * sqrt(x) * (x^2 / e^x), then returns the result divided by x as
+-- Xmult. Same "replace the running stat with f(x) regardless of what's
+-- already been applied" trick Ackermann Function/Zeta Function use.
+-- e is hardcoded as a big() literal since there's no built-in Euler's
+-- number constant in this codebase's OmegaNum layer; big(2.71828...):
+-- arrow(1, x) computes e^x the same way base:arrow(1, exponent) is used
+-- for "^" everywhere else in this file.
 SMODS.Joker{
-    key = "coupon",
+    key = "gamma_function",
 
     loc_txt = {
-        name = "Coupon",
+        name = "Gamma Function",
         text = {
-            "Rerolls in the shop",
-            "always cost {C:money}$1{}"
+            "Takes the {C:attention}Gamma function{} of mult",
+            "{C:inactive}(f(x) = 2.5*sqrt(x)*(x^2/e^x)){}",
         }
     },
 
-    rarity = "hex_mythic",
-    in_pool = function(self) return false end, -- hidden/unlock-only rarity, like the other Mythic+ jokers
-
     atlas = "HexJokers",
     pos = { x = 5, y = 0 }, -- placeholder art slot, same as other undrawn Mythic+ jokers
+    rarity = "hex_mythic",
+    in_pool = function(self) return false end, -- hidden/unlock-only rarity, like other Mythic+ jokers
 
     cost = 200,
     unlocked = true,
     discovered = true,
-    blueprint_compat = false,
+    blueprint_compat = false, -- reads the live running Mult directly; a Blueprint copy would read from ITS OWN position in the row, a different snapshot, so it's excluded below
     eternal_compat = true,
+
+    calculate = function(self, card, context)
+        if context.joker_main and not context.blueprint then
+            local x = (G.GAME and G.GAME.hex_live_mult) or big(1)
+
+            if x:gt(big(0)) then
+                local e_const = big(2.718281828459045)
+
+                local sqrt_x = x:arrow(1, 0.5)
+                local x_tet = x:arrow(2, 2)
+                local e_pow_x = e_const:arrow(1, x)
+
+                local fx = big(2.5):mul(sqrt_x):mul(x_tet):div(e_pow_x)
+                local xmult = fx:div(x)
+
+                return {
+                    Xmult = xmult,
+                    colour = G.C.MULT,
+                }
+            end
+        end
+    end,
 }
+
 
 
 

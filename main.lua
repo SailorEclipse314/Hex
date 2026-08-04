@@ -210,7 +210,22 @@ function mod_mult(_mult)
     return result
 end
 
+-- Chips equivalent of the hex_live_mult mirror above. mod_chips() in
+-- misc_functions.lua is the same kind of identity-wrapper choke point
+-- for hand_chips that mod_mult() is for mult (state_events.lua lines
+-- 884/911/924), so hooking it the same way gives real-time visibility
+-- into "the current running Chips" at any point during scoring.
+local hex_old_mod_chips = mod_chips
 
+function mod_chips(_chips)
+    local result = hex_old_mod_chips(_chips)
+
+    if G.GAME then
+        G.GAME.hex_live_chips = to_big(result)
+    end
+
+    return result
+end
 
 
 
