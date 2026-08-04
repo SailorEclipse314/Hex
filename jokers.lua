@@ -6808,6 +6808,76 @@ SMODS.Joker{
 }
 
 
+
+
+-- Glitch: every hand played, rolls two SEPARATE random integers
+-- 1-10 -- one for ^Mult, one for ^Chips. Uses the same
+-- math.floor(pseudorandom(pseudoseed(key), 1, max)) integer-roll
+-- pattern as the Collapse effect in consumables.lua, with two distinct
+-- seed keys so the two rolls don't move in lockstep with each other.
+SMODS.Joker{
+    key = "glitch",
+
+    loc_txt = {
+        name = "Glitch",
+        text = {
+            "Gives {C:mult}^1{} to {C:mult}^10{} Mult",
+            "and {C:chips}^1{} to {C:chips}^10{} Chips",
+            "at random, {C:attention}separately{},",
+            "when {C:attention}playing{} a hand",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 5, y = 0 }, -- placeholder art slot, same as other undrawn Mythic+ jokers
+    rarity = "hex_mythic",
+    in_pool = function(self) return false end, -- hidden/unlock-only rarity, like other Mythic+ jokers
+
+    cost = 200,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            last_mult_roll = 1,
+            last_chips_roll = 1,
+        }
+    },
+
+    -- Shows the most recent roll in the card's own text, same
+    -- "display the last live value" approach other dynamic jokers in
+    -- this file use for their (Currently ...) lines.
+    loc_vars = function(self, info_queue, card)
+        return {
+            vars = {
+                card.ability.extra.last_mult_roll,
+                card.ability.extra.last_chips_roll,
+            }
+        }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main and not context.blueprint then
+            local mult_roll = math.floor(pseudorandom(pseudoseed(mod.prefix .. "_glitch_mult"), 1, 10))
+            local chips_roll = math.floor(pseudorandom(pseudoseed(mod.prefix .. "_glitch_chips"), 1, 10))
+
+            card.ability.extra.last_mult_roll = mult_roll
+            card.ability.extra.last_chips_roll = chips_roll
+
+            return {
+                e_mult = big(mult_roll),
+                e_chips = big(chips_roll),
+                colour = G.C.MULT,
+            }
+        end
+    end,
+}
+
+
+
+
 SMODS.Joker{
     key = "overflow",
 
@@ -7350,6 +7420,95 @@ SMODS.Joker{
         G.jokers.config.card_limit = G.jokers.config.card_limit - 999995
     end,
 }
+
+
+-- Jokeo: at the end of the shop, duplicates a random OWNED Joker of
+-- Mythic rarity or below (excludes Transcendental/Divine/Absolute --
+-- and Jokeo itself, since Jokeo's own rarity is hex_transcendental --
+-- so nothing above Mythic can ever be picked) as a Negative copy.
+-- Same G.FUNCS.toggle_shop hook + copy_card + set_edition({negative=true})
+-- pattern the Perkeo-copy hook above uses for consumables, just
+-- pointed at G.jokers.cards with a rarity filter instead. No card_limit
+-- check, matching Fermi Method's own reasoning elsewhere in this file --
+-- Negative Jokers don't count against the Joker slot limit in vanilla.
+local hex_old_toggle_shop_jokeo = G.FUNCS.toggle_shop
+
+G.FUNCS.toggle_shop = function(e)
+    if G.jokers and G.jokers.cards then
+        for _, source in ipairs(G.jokers.cards) do
+            if source.config and source.config.center
+            and source.config.center.key == ("j_" .. mod.prefix .. "_jokeo") then
+
+                local pool = {}
+                for _, j in ipairs(G.jokers.cards) do
+                    local rarity = j.config and j.config.center and j.config.center.rarity
+
+                    -- Mythic (string key "hex_mythic") or below (plain
+                    -- numeric rarities 1-4). Transcendental/Divine/Absolute
+                    -- are their own separate string keys, so they're
+                    -- excluded automatically -- this also excludes Jokeo
+                    -- itself, whose own rarity is "hex_transcendental".
+                    if j ~= source
+                    and (type(rarity) == "number" or rarity == "hex_mythic") then
+                        pool[#pool + 1] = j
+                    end
+                end
+
+                if pool[1] then
+                    local chosen = pseudorandom_element(pool, pseudoseed(mod.prefix .. "_jokeo"))
+
+                    G.E_MANAGER:add_event(Event({
+                        trigger = "after",
+                        delay = 0.2,
+                        func = function()
+                            local new_card = copy_card(chosen, nil)
+                            new_card:set_edition({ negative = true }, true)
+                            new_card:add_to_deck()
+                            G.jokers:emplace(new_card)
+                            return true
+                        end
+                    }))
+
+                    card_eval_status_text(source, "extra", nil, nil, nil, {
+                        message = localize("k_duplicated_ex"),
+                        colour = G.C.LEGENDARY,
+                    })
+                end
+            end
+        end
+    end
+
+    return hex_old_toggle_shop_jokeo(e)
+end
+
+SMODS.Joker{
+    key = "jokeo",
+
+    loc_txt = {
+        name = "Jokeo",
+        text = {
+            "At the end of the shop,",
+            "creates a {C:dark_edition}Negative{} copy of a",
+            "random owned Joker of",
+            "{C:mythic}Mythic{} rarity or below",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 7, y = 8 }, 
+    soul_pos = { x = 1, y = 9 },
+    rarity = "hex_transcendental",
+    in_pool = function(self)
+        return false -- hidden/unlock-only rarity, like Cantor/Juno/Endless Abyss above
+    end,
+
+    cost = 200000,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false,
+    eternal_compat = true,
+}
+
 
 
 
