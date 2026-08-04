@@ -6525,6 +6525,166 @@ SMODS.Joker{
     end,
 }
 
+-- Hypergeometric: ^2 Mult and ^2 Chips, plus +$1000 and +20 Hex points
+-- at the end of every round. Exponent scoring mirrors Set Theory's
+-- e_mult/e_chips pattern above; the end-of-round payout uses the same
+-- context.end_of_round + last_round dedupe as Totem/Overtime/Cantor,
+-- since context.end_of_round fires multiple times per card in this build.
+SMODS.Joker{
+    key = "hypergeometric",
+
+    loc_txt = {
+        name = "Hypergeometric",
+        text = {
+            "Gives {C:mult}^#1#{} Mult and",
+            "{C:chips}^#1#{} Chips",
+            "At the end of round, gives",
+            "{C:money}+$#2#{} and {C:purple}+#3#{}",
+            "{C:purple}Hex points{}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 5, y = 0 }, -- placeholder art slot, same as other undrawn Mythic+ jokers
+    rarity = "hex_mythic",
+    in_pool = function(self) return false end, -- hidden/unlock-only rarity, like other Mythic+ jokers
+
+    cost = 200,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            e_mult = big(2),
+            e_chips = big(2),
+            dollars = 1000,
+            hex_points = big(20),
+            last_round = nil,
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return {
+            vars = {
+                card.ability.extra.e_mult,
+                card.ability.extra.dollars,
+                card.ability.extra.hex_points,
+            }
+        }
+    end,
+
+    calculate = function(self, card, context)
+        -- ^2 Mult and ^2 Chips, every scoring hand
+        if context.joker_main then
+            return {
+                e_mult = card.ability.extra.e_mult,
+                e_chips = card.ability.extra.e_chips,
+                colour = G.C.MULT,
+            }
+        end
+
+        -- +$1000 and +20 Hex points, once per round
+        if context.end_of_round
+        and not context.blueprint
+        and card.ability.extra.last_round ~= G.GAME.round then
+
+            card.ability.extra.last_round = G.GAME.round
+
+            G.GAME.hex_points = (G.GAME.hex_points or big(0)):add(card.ability.extra.hex_points)
+
+            return {
+                dollars = card.ability.extra.dollars,
+                colour = G.C.MONEY,
+            }
+        end
+    end,
+}
+
+
+-- Lorenz Attractor: every hand played, randomly picks ONE of four
+-- effects to apply -- ^5 Mult, ^5 Chips, +$5000, or +50 Hex points.
+-- Uses the same pseudorandom_element(pool, pseudoseed(key)) pattern
+-- as The Seal of Aces above for a seeded, save-compatible random pick.
+-- Hex points are applied via direct state mutation (not a native
+-- scoring field), same as Totem/Overtime/Cantor elsewhere in this file.
+SMODS.Joker{
+    key = "lorenz_attractor",
+
+    loc_txt = {
+        name = "Lorenz Attractor",
+        text = {
+            "Every hand played, gives one",
+            "of the following at random:",
+            "{C:mult}^#1#{} Mult, {C:chips}^#1#{} Chips,",
+            "{C:money}+$#2#{}, or {C:purple}+#3#{} {C:purple}Hex points{}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 5, y = 0 }, -- placeholder art slot, same as other undrawn Mythic+ jokers
+    rarity = "hex_mythic",
+    in_pool = function(self) return false end, -- hidden/unlock-only rarity, like other Mythic+ jokers
+
+    cost = 200,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = true,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            e_mult = big(5),
+            dollars = 5000,
+            hex_points = big(50),
+        }
+    },
+
+    loc_vars = function(self, info_queue, card)
+        return {
+            vars = {
+                card.ability.extra.e_mult,
+                card.ability.extra.dollars,
+                card.ability.extra.hex_points,
+            }
+        }
+    end,
+
+    calculate = function(self, card, context)
+        if context.joker_main and not context.blueprint then
+            local options = { "mult", "chips", "dollars", "hex" }
+            local chosen = pseudorandom_element(options, pseudoseed(mod.prefix .. "_lorenz_attractor"))
+
+            if chosen == "mult" then
+                return {
+                    e_mult = card.ability.extra.e_mult,
+                    colour = G.C.MULT,
+                }
+            elseif chosen == "chips" then
+                return {
+                    e_chips = card.ability.extra.e_mult,
+                    colour = G.C.CHIPS,
+                }
+            elseif chosen == "dollars" then
+                return {
+                    dollars = card.ability.extra.dollars,
+                    colour = G.C.MONEY,
+                }
+            else
+                G.GAME.hex_points = (G.GAME.hex_points or big(0)):add(card.ability.extra.hex_points)
+
+                return {
+                    message = "+50 Hex",
+                    colour = G.C.HEX_ORPLE or G.C.PURPLE,
+                }
+            end
+        end
+    end,
+}
+
+
+
 
 -- Aurora: raises both Chips and Mult to the power of (1 + 0.05 per
 -- dollar currently held), so 0 dollars = ^1 (no change), 20 dollars =
