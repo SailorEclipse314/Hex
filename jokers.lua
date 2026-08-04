@@ -7282,20 +7282,6 @@ SMODS.Joker{
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 SMODS.Joker{
     key = "hamiltonian",
 
@@ -7365,6 +7351,159 @@ SMODS.Joker{
     end,
 }
 
+-- Lagrangian: while owned, sets G.GAME.probabilities.normal to an
+-- enormous value, guaranteeing every probability check in this
+-- codebase resolves as true. G.GAME.probabilities.normal is the same
+-- shared global multiplier Oops All 6s/Crystal Ball/Russian Roulette
+-- etc. all read as `chance = base_chance * G.GAME.probabilities.normal`
+-- before comparing against pseudorandom() (content.lua:1571/1595,
+-- jokers.lua:1266/2008/2547/2743) -- with base_chance typically a
+-- small fraction like 1/4 or 1/23, a multiplier this large pushes the
+-- computed chance far past 1, which pseudorandom()'s [0,1) roll can
+-- never exceed, guaranteeing a hit. Uses the same add_to_deck/
+-- remove_from_deck lifecycle pair Open Market uses for its own
+-- persistent global bonus, applied once regardless of how the card
+-- enters/leaves your Jokers.
+--
+-- CAVEAT: this SETS the global rather than multiplying it, storing
+-- only its own prior snapshot to restore on removal. If another
+-- probability-boosting effect (like Oops All 6s) changes
+-- probabilities.normal while Lagrangian is also owned, removing
+-- Lagrangian will restore Lagrangian's own pre-ownership snapshot and
+-- silently discard whatever that other effect had changed it to in the
+-- meantime. Selling Lagrangian while also stacking Oops All 6s is the
+-- one case where this can misbehave -- flag it if that combo needs
+-- exact stacking behavior instead.
+SMODS.Joker{
+    key = "lagrangian",
+
+    loc_txt = {
+        name = "Lagrangian",
+        text = {
+            "All listed probabilities are",
+            "{C:attention}100%{} chance to happen",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 5, y = 0 }, -- placeholder art slot, same as other undrawn Mythic+ jokers
+    rarity = "hex_mythic",
+    in_pool = function(self) return false end, -- hidden/unlock-only rarity, like other Mythic+ jokers
+
+    cost = 200,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            previous_normal = nil,
+        }
+    },
+
+    add_to_deck = function(self, card, from_debuff)
+        G.GAME.probabilities = G.GAME.probabilities or {}
+        G.GAME.probabilities.normal = (G.GAME.probabilities.normal or 1) * 100
+    end,
+
+    remove_from_deck = function(self, card, from_debuff)
+        if G.GAME.probabilities then
+            G.GAME.probabilities.normal = (G.GAME.probabilities.normal or 100) / 100
+        end
+    end,
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-- Spacetime: at the end of a Boss Blind, creates 1 random Black Hole
+-- card. Same context.end_of_round + G.GAME.blind.boss + last_round
+-- dedupe pattern Totem uses above, and the same
+-- hex_get_black_hole_centers() + explicit-key SMODS.create_card pattern
+-- Sheaf uses for Star cards elsewhere in this file (Black Hole cards
+-- are this mod's own custom ConsumableType, shop_rate = 0, never
+-- naturally generated -- see hex_get_black_hole_centers() in
+-- consumables.lua, which already respects Showman for duplicates).
+SMODS.Joker{
+    key = "spacetime",
+
+    loc_txt = {
+        name = "Spacetime",
+        text = {
+            "Creates {C:attention}1{} random",
+            "{C:black_hole}Black Hole{} card at the",
+            "end of a {C:attention}Boss Blind{}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 5, y = 0 }, -- placeholder art slot, same as other undrawn Transcendental+ jokers
+    rarity = "hex_transcendental",
+    in_pool = function(self)
+        return false -- hidden/unlock-only rarity, like Cantor/Jokeo/SSCG Function above
+    end,
+
+    cost = 100000,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false,
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            last_round = nil,
+        }
+    },
+
+    calculate = function(self, card, context)
+        if context.end_of_round
+        and G.GAME.blind
+        and G.GAME.blind.boss
+        and not context.blueprint
+        and card.ability.extra.last_round ~= G.GAME.round then
+
+            card.ability.extra.last_round = G.GAME.round
+
+            G.E_MANAGER:add_event(Event({
+                trigger = "after",
+                delay = 0.2,
+                func = function()
+                    if G.consumeables and #G.consumeables.cards < G.consumeables.config.card_limit then
+                        local pool = hex_get_black_hole_centers()
+
+                        if #pool > 0 then
+                            local chosen = pool[math.random(#pool)]
+
+                            local new_card = SMODS.create_card({
+                                key = chosen.key,
+                                area = G.consumeables,
+                            })
+
+                            G.consumeables:emplace(new_card)
+                        end
+                    end
+                    return true
+                end
+            }))
+
+            return {
+                message = "Black Hole!",
+                colour = G.C.BLACK_HOLE,
+            }
+        end
+    end,
+}
 
 
 -- Cantor: gives its current award (starting at +50) in Hex points at the
