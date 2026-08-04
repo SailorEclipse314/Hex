@@ -210,23 +210,38 @@ function mod_mult(_mult)
     return result
 end
 
--- Chips equivalent of the hex_live_mult mirror above. mod_chips() in
--- misc_functions.lua is the same kind of identity-wrapper choke point
--- for hand_chips that mod_mult() is for mult (state_events.lua lines
--- 884/911/924), so hooking it the same way gives real-time visibility
--- into "the current running Chips" at any point during scoring.
+-- Extends the hex_live_chips mirror with an "override" mechanism: any
+-- joker can call hex_arm_chip_override(value) right before returning
+-- its calculate() result to force the VERY NEXT mod_chips() call to
+-- return that exact value directly, bypassing addition/division
+-- entirely. This avoids the catastrophic precision loss that happens
+-- when arithmetic mixes a huge running Chips value with a comparatively
+-- tiny target value (e.g. slog_chips - chips silently rounds to -chips
+-- once chips is large enough, since the tiny slog_chips term falls
+-- below floating-point/OmegaNum's significant-digit precision). Same
+-- "arm right before triggering, consume once, clear after" idiom the
+-- Black Hole display-total code uses elsewhere in this mod.
 local hex_old_mod_chips = mod_chips
+local hex_chip_override = nil
 
 function mod_chips(_chips)
-    local result = hex_old_mod_chips(_chips)
+    if hex_chip_override ~= nil then
+        local override = hex_chip_override
+        hex_chip_override = nil
 
-    if G.GAME then
-        G.GAME.hex_live_chips = to_big(result)
+        if G.GAME then G.GAME.hex_live_chips = to_big(override) end
+        return override
     end
 
+    local result = hex_old_mod_chips(_chips)
+
+    if G.GAME then G.GAME.hex_live_chips = to_big(result) end
     return result
 end
 
+function hex_arm_chip_override(value)
+    hex_chip_override = value
+end
 
 
 

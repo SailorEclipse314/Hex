@@ -6524,7 +6524,7 @@ SMODS.Joker{
     loc_txt = {
         name = "Khinchin's Constant",
         text = {
-            "Takes Chips to the power of",
+            "Takes {C:chips}Chips{} to the power of",
             "Khinchin's constant",
             "{C:inactive}(Khinchin's constant is roughly {}{C:attention}2.68545{}{C:inactive}){}",
         }
@@ -7879,6 +7879,11 @@ SMODS.Joker{
 
 
 
+
+
+
+
+
 -- SSCG Function: when a Blind is selected, adds one card with a random
 -- Suit and Rank to your deck, carrying the Diamond enhancement. Uses
 -- the same context.setting_blind + last_round dedupe as Dirac Equation
@@ -7970,7 +7975,71 @@ SMODS.Joker{
 
 
 
+-- TREE(3): gives ^^100 Mult via the engine's own native ee_mult key
+-- (current Mult tetrated to height 100, same self-referential operator
+-- Hypergeometric's e_mult and Goodstein Sequence's ee_mult use
+-- elsewhere -- no live-read needed here since it's just "current Mult
+-- ^^ 100", the exact thing ee_mult already does).
+--
+-- Chips is different: reads G.GAME.hex_live_chips (the mirror the
+-- mod_chips hook in main.lua maintains for Zeta Function above) --
+-- the running Chips right before this card's own position, including
+-- every Joker to its left -- takes chips:slog(big(10)) (super-log base
+-- 10), clamps the result to a minimum of 1, then returns
+-- result/chips as Xchip_mod so the running Chips gets REPLACED with
+-- the super-log result, same "f(x)/x as Xchip_mod" trick Zeta Function
+-- uses.
+SMODS.Joker{
+    key = "tree_3",
 
+    loc_txt = {
+        name = "TREE(3)",
+        text = {
+            "Gives {X:mult,C:white}^^100{} Mult, but",
+            "takes the {C:attention}super-logarithm{}",
+            "base 10 of Chips",
+            "{C:inactive}(min chips of 1){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 5, y = 0 }, -- placeholder art slot, same as other undrawn Transcendental+ jokers
+    rarity = "hex_transcendental",
+    in_pool = function(self)
+        return false -- hidden/unlock-only rarity, like Cantor/Jokeo/Einstein/Exponential Factorial above
+    end,
+
+    cost = 100000,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false, -- reads the live running Chips directly for the slog half; a Blueprint copy would read from ITS OWN position in the row, a different snapshot, so it's excluded below
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            e_amount = big(100), -- the ^^100 Mult height
+        }
+    },
+
+    calculate = function(self, card, context)
+        if context.joker_main and not context.blueprint then
+            local chips = (G.GAME and G.GAME.hex_live_chips) or big(1)
+            if chips:lt(big(1)) then chips = big(1) end
+
+            local slog_chips = chips:slog(big(10))
+            if slog_chips:lt(big(1)) then slog_chips = big(1) end
+
+            hex_arm_chip_override(slog_chips)
+
+            return {
+                ee_mult = card.ability.extra.e_amount,
+                chips = big(0), -- no-op addition; the real override happens via hex_arm_chip_override above
+                message = "=" .. tostring(slog_chips) .. " Chips",
+                colour = G.C.MULT,
+            }
+        end
+    end,
+}
 
 
 
