@@ -6686,6 +6686,60 @@ SMODS.Joker{
 
 
 
+-- Ackermann Function: reads G.GAME.hex_live_mult (mirrored by the
+-- mod_mult() hook in main.lua) -- the ACTUAL running Mult right before
+-- this card's own position, including every Joker to its left -- computes
+-- A(3, mult) = 2^(mult+3) - 3 on it, then returns A(3,mult)/mult as
+-- Xmult. Since the engine applies Xmult as mult = mult * Xmult_mod
+-- (state_events.lua line 912), mult * (A(3,mult)/mult) = A(3,mult)
+-- exactly, regardless of what's already been applied by cards to the
+-- left -- effectively REPLACING the running Mult with A(3, mult) at
+-- this card's position, rather than just multiplying it further.
+SMODS.Joker{
+    key = "ackermann_function",
+
+    loc_txt = {
+        name = "Ackermann Function",
+        text = {
+            "Takes the Ackermann Function of mult",
+            "{C:attention}A(3, mult){}",
+            "{C:inactive}(A(3,n) = 2^(n+3) - 3){}",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 5, y = 0 }, -- placeholder art slot, same as other undrawn Mythic+ jokers
+    rarity = "hex_mythic",
+    in_pool = function(self) return false end, -- hidden/unlock-only rarity, like other Mythic+ jokers
+
+    cost = 200,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false, -- reads the live running Mult directly; a Blueprint copy would read from ITS OWN position in the row, which is a different (and semantically confusing) snapshot, so it's excluded below
+    eternal_compat = true,
+
+    calculate = function(self, card, context)
+        if context.joker_main and not context.blueprint then
+            local mult = (G.GAME and G.GAME.hex_live_mult) or big(1)
+
+            if mult:gt(big(0)) then
+                local a3m = big(2):arrow(1, mult:add(big(3))):sub(big(3))
+                local xmult = a3m:div(mult)
+
+                return {
+                    Xmult = xmult,
+                    colour = G.C.MULT,
+                }
+            end
+        end
+    end,
+}
+
+
+
+
+
+
 -- Aurora: raises both Chips and Mult to the power of (1 + 0.05 per
 -- dollar currently held), so 0 dollars = ^1 (no change), 20 dollars =
 -- ^2, etc. Live-computed from G.GAME.dollars every time it scores,
@@ -7116,6 +7170,9 @@ SMODS.Joker{
 
 
 
+
+
+
 SMODS.Joker{
     key = "hamiltonian",
 
@@ -7508,6 +7565,105 @@ SMODS.Joker{
     blueprint_compat = false,
     eternal_compat = true,
 }
+
+
+
+
+
+-- SSCG Function: when a Blind is selected, adds one card with a random
+-- Suit and Rank to your deck, carrying the Diamond enhancement. Uses
+-- the same context.setting_blind + last_round dedupe as Dirac Equation
+-- above (that context fires more than once per blind-select in this
+-- build), and the same SMODS.create_card{set="Base",...} + add_to_deck +
+-- G.playing_cards registration block the Genesis consumable uses
+-- elsewhere in this mod for creating a fresh playing card mid-run.
+local HEX_SSCG_RANKS = { "A", "K", "Q", "J", "T", "9", "8", "7", "6", "5", "4", "3", "2" }
+local HEX_SSCG_SUITS = { "Spades", "Hearts", "Clubs", "Diamonds" }
+
+SMODS.Joker{
+    key = "sscg_function",
+
+    loc_txt = {
+        name = "SSCG Function",
+        text = {
+            "When {C:attention}Blind{} is selected,",
+            "adds a card with a random",
+            "Suit and Rank to your deck,",
+            "carrying the {C:blue}Diamond{} enhancement",
+        }
+    },
+
+    atlas = "HexJokers",
+    pos = { x = 5, y = 0 }, -- placeholder art slot, same as other undrawn Transcendental+ jokers
+    rarity = "hex_transcendental",
+    in_pool = function(self)
+        return false -- hidden/unlock-only rarity, like Cantor/Dirac Equation above
+    end,
+
+    cost = 100000,
+    unlocked = true,
+    discovered = true,
+    blueprint_compat = false, -- same reasoning as Dirac Equation: effect explicitly excludes context.blueprint below, so a Blueprint copy has nothing to trigger
+    eternal_compat = true,
+
+    config = {
+        extra = {
+            last_round = nil,
+        }
+    },
+
+    calculate = function(self, card, context)
+        if context.setting_blind
+        and not context.blueprint
+        and card.ability.extra.last_round ~= G.GAME.round then
+
+            card.ability.extra.last_round = G.GAME.round
+
+            local suit = pseudorandom_element(HEX_SSCG_SUITS, pseudoseed(mod.prefix .. "_sscg_suit"))
+            local rank = pseudorandom_element(HEX_SSCG_RANKS, pseudoseed(mod.prefix .. "_sscg_rank"))
+
+            G.E_MANAGER:add_event(Event({
+                trigger = "after",
+                delay = 0.1,
+                func = function()
+                    local new_card = SMODS.create_card({
+                        set = "Base",
+                        suit = suit,
+                        rank = rank,
+                        enhancement = "m_" .. mod.prefix .. "_diamond",
+                        area = G.deck,
+                    })
+
+                    new_card:add_to_deck()
+                    G.deck:emplace(new_card)
+
+                    if G.playing_cards then
+                        local already_present = false
+                        for _, c in ipairs(G.playing_cards) do
+                            if c == new_card then already_present = true; break end
+                        end
+                        if not already_present then
+                            table.insert(G.playing_cards, new_card)
+                        end
+                    end
+
+                    card_eval_status_text(new_card, "extra", nil, nil, nil, {
+                        message = "SSCG!",
+                        colour = G.C.BLUE,
+                    })
+
+                    return true
+                end
+            }))
+        end
+    end,
+}
+
+
+
+
+
+
 
 
 

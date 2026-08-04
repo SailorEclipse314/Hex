@@ -181,6 +181,41 @@ function loc_colour(_c, _default)
 end
 
 
+
+
+
+
+
+-- Mirrors the live running Mult into G.GAME.hex_live_mult every single
+-- time it changes during hand scoring. mod_mult() in misc_functions.lua
+-- is a trivial identity wrapper that EVERY mult update in evaluate_play()
+-- passes through (state_events.lua lines 615/893/910-912/etc.), so
+-- hooking it here gives real-time visibility into "the current running
+-- Mult" without touching evaluate_play() itself. By the time a Joker's
+-- own calculate() runs for its context.joker_main effect (state_events.lua
+-- line 905), the last mod_mult() call was from either the previous
+-- Joker's own Xmult_mod/mult_mod application or this Joker's own edition
+-- effect -- never this Joker's own joker_main effect, since that hasn't
+-- been applied yet. So G.GAME.hex_live_mult at that moment is exactly
+-- "the Mult so far, including every Joker to this card's left."
+local hex_old_mod_mult = mod_mult
+
+function mod_mult(_mult)
+    local result = hex_old_mod_mult(_mult)
+
+    if G.GAME then
+        G.GAME.hex_live_mult = to_big(result)
+    end
+
+    return result
+end
+
+
+
+
+
+
+
 function ease_dollars(mod, instant)
     local function _mod(mod)
         local dollar_UI = G.HUD:get_UIE_by_ID('dollar_text_UI')
