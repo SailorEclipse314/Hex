@@ -9678,7 +9678,6 @@ end
 -- loc_vars that passes them to localize renders a table instead of a
 -- number -- which is what stopped the descriptions updating.
 function hex_singularity_lenient(v)
-    if lenient_bignum then return lenient_bignum(v) end
     return v
 end
 
