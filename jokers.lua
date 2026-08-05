@@ -495,48 +495,18 @@ local function hex_summoning_soul_heart_centers()
     return G.P_CENTERS[HEX_SOUL_CENTER_KEY], G.P_CENTERS[HEX_HEART_CENTER_KEY]
 end
 
--- Recomputes the soul_rate bonus this card currently contributes, based
--- on its live ability.extra.mult. `mult` matches Entropy's existing
--- "^mult$" score pattern, so Entropy squares it automatically -- but
--- since Entropy only touches the ability table and this card's actual
--- effect lives on the external Soul/Heart centers, something has to
--- carry that squared value over. This divides out whatever this card
--- had previously baked in (applied_scale) and reapplies the current
--- mult, so it stays correct no matter how many times Entropy fires, and
--- still divides back out cleanly on sale.
-function hex_summoning_refresh(card)
-    if not (card and card.ability and card.ability.extra) then return end
-
-    local soul_center, heart_center = hex_summoning_soul_heart_centers()
-    local old_scale = hex_to_plain_number(card.ability.extra.applied_scale or 1)
-    local new_scale = hex_to_plain_number(card.ability.extra.mult or 3)
-
-    if old_scale == 0 then old_scale = 1 end -- guard against stray /0
-
-    if soul_center and soul_center.soul_rate then
-        soul_center.soul_rate = soul_center.soul_rate / old_scale * new_scale
-    end
-
-    if heart_center and heart_center.soul_rate then
-        heart_center.soul_rate = heart_center.soul_rate / old_scale * new_scale
-    end
-
-    card.ability.extra.applied_scale = new_scale
-end
-
 SMODS.Joker{
     key = "summoning",
 
     loc_txt = {
         name = "Summoning",
         text = {
-            "{C:attention}X#1#{} the chance for",
+            "{C:attention}X3{} the chance for",
             "{C:legendary}The Soul{} and {C:mythic}Heart{}",
             "to appear in {C:tarot}Arcana{} and",
             "{C:spectral}Spectral{} packs",
         }
     },
-
 
 
     atlas = "HexJokers",
@@ -549,34 +519,28 @@ SMODS.Joker{
     blueprint_compat = false, -- the effect lives in the lifecycle hooks below, not in calculate, so a Blueprint copy has nothing to mimic
     eternal_compat = true,
 
-    config = {
-        extra = {
-            mult = 3,          -- the X3 -- Entropy squares this automatically
-            applied_scale = 1, -- bookkeeping only, never squared (name doesn't match any stat pattern)
-        }
-    },
-
-    loc_vars = function(self, info_queue, card)
-        return { vars = { hex_to_plain_number(card.ability.extra.mult) } }
-    end,
-
     add_to_deck = function(self, card, from_debuff)
-        hex_summoning_refresh(card)
+        local soul_center, heart_center = hex_summoning_soul_heart_centers()
+
+        if soul_center and soul_center.soul_rate then
+            soul_center.soul_rate = soul_center.soul_rate * 3
+        end
+
+        if heart_center and heart_center.soul_rate then
+            heart_center.soul_rate = heart_center.soul_rate * 3
+        end
     end,
 
     remove_from_deck = function(self, card, from_debuff)
         local soul_center, heart_center = hex_summoning_soul_heart_centers()
-        local scale = hex_to_plain_number(card.ability.extra.applied_scale or 1)
 
         if soul_center and soul_center.soul_rate then
-            soul_center.soul_rate = soul_center.soul_rate / scale
+            soul_center.soul_rate = soul_center.soul_rate / 3
         end
 
         if heart_center and heart_center.soul_rate then
-            heart_center.soul_rate = heart_center.soul_rate / scale
+            heart_center.soul_rate = heart_center.soul_rate / 3
         end
-
-        card.ability.extra.applied_scale = 1
     end,
 }
 

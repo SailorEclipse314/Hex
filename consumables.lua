@@ -9503,16 +9503,7 @@ function hex_entropy_apply_to_card(card)
         skip  = center_key and HEX_ENTROPY_EXTRA_SKIP_SUBFIELDS_BY_KEY[center_key] or nil,
     }
 
-        hex_entropy_square_table(card.ability, 1, ctx)
-
-    -- Summoning's effect lives outside its own ability table (it
-    -- multiplies the Soul/Heart centers' soul_rate directly), so
-    -- squaring ability.extra.mult above doesn't do anything on its own.
-    -- This makes the squared value actually take effect.
-    if center_key == ("j_" .. mod.prefix .. "_summoning") then
-        hex_summoning_refresh(card)
-    end
-    
+    hex_entropy_square_table(card.ability, 1, ctx)
     return true
 end
 
