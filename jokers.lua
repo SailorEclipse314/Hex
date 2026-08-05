@@ -7637,15 +7637,7 @@ SMODS.Joker{
 
 
 
--- Amplifier: makes every scaling Joker scale as O(a^n) instead of
--- Singularity's O(n^a), where a = this card's own extra.exponent
--- (starts at 2). Storing it as `extra.exponent` means Entropy squares
--- it automatically, no allowlist entry needed -- "exponent$" is already
--- in HEX_ENTROPY_SCORE_PATTERNS (consumables.lua), and
--- hex_entropy_square_table recurses into any plain sub-table (like
--- `extra`) looking for name matches regardless of the per-Joker
--- allowlist, which is only needed for fields that DON'T match a known
--- name pattern.
+
 SMODS.Joker{
     key = "amplifier",
 
@@ -7676,7 +7668,7 @@ SMODS.Joker{
 
     config = {
         extra = {
-            exponent = big(2), -- "a" -- named extra.exponent specifically so Entropy's existing field-name matching squares it for free
+            exponent = big(2), 
         }
     },
 
@@ -7686,139 +7678,6 @@ SMODS.Joker{
 }
 
 
-
--- Same override as before, but the Card.calculate_joker wrap is now
--- installed LAZILY (on first use) rather than at file-load time.
--- jokers.lua loads before consumables.lua in this mod, so capturing
--- Card.calculate_joker here directly would grab the UNPATCHED original --
--- Singularity's own patch (installed later, in consumables.lua) would
--- then wrap OURS instead of the other way around, meaning Singularity's
--- polynomial rewrite would run AFTER Amplifier's and silently undo it.
--- Deferring the actual wrap until the first real call happens (which is
--- guaranteed to be well after every mod file has finished loading, since
--- Card.calculate_joker isn't called until an actual hand is scored)
--- ensures we always wrap whatever's ALREADY installed at that point --
--- Singularity included -- so Amplifier's rewrite still runs last.
-function hex_amplifier_rewrite(card, snapshot, a)
-    if #snapshot == 0 then return end
-
-    card.ability.hex_amplifier_info = card.ability.hex_amplifier_info or {}
-    local info = card.ability.hex_amplifier_info
-
-    for _, s in ipairs(snapshot) do
-        local now = s.tbl[s.key]
-
-        if type(now) == "number" or type(now) == "table" or type(now) == "cdata" then
-            local delta = to_big(now):sub(s.value)
-
-            if delta:gt(big(0)) then
-                local entry = info[s.path]
-                if not entry then
-                    entry = { base = hex_singularity_lenient(delta), n = big(0) }
-                    info[s.path] = entry
-                end
-
-                entry.n = to_big(entry.n):add(big(1))
-                local n = entry.n
-
-                if entry.rate_key == nil then
-                    entry.rate_key = hex_singularity_find_rate_field(s.tbl, s.key, delta) or false
-                end
-
-                if entry.rate_key then
-                    local next_step = a:arrow(1, n:add(big(1))):sub(a:arrow(1, n))
-
-                    print("AMPLIFIER n=" .. tostring(n) .. " a=" .. tostring(a)
-                        .. " next_step=" .. tostring(next_step)
-                        .. " base=" .. tostring(entry.base)) -- TEMP DEBUG
-
-                    if next_step:gt(big(0)) then
-                        local written = to_big(entry.base):mul(next_step)
-                        print("AMPLIFIER writing " .. tostring(written) .. " to " .. tostring(entry.rate_key)) -- TEMP DEBUG
-                        s.tbl[entry.rate_key] = hex_singularity_lenient(written)
-                    else
-                        print("AMPLIFIER next_step NOT > 0, skipping write") -- TEMP DEBUG
-                    end
-                else
-                    local step
-
-                    if n:lt(big(2)) then
-                        step = big(1)
-                    else
-                        step = a:arrow(1, n):sub(a:arrow(1, n:sub(big(1))))
-                    end
-
-                    if step:gt(big(0)) then
-                        s.tbl[s.key] = hex_singularity_lenient(
-                            s.value:add(to_big(entry.base):mul(step))
-                        )
-                    end
-                end
-            end
-        end
-    end
-end
-
-function hex_amplifier_a()
-    local found = SMODS.find_card("j_" .. mod.prefix .. "_amplifier")
-    if found and found[1] and found[1].ability and found[1].ability.extra then
-        return to_big(found[1].ability.extra.exponent or 2)
-    end
-    return big(2)
-end
-
-
-
--- Install trigger, take three: G.FUNCS.evaluate_play doesn't reliably
--- fire the way this needed (see the N of a Kind / Flush N of a Kind
--- comment on G.HEX_REAL_SCORING's own declaration -- that exact wrap
--- approach was tried and documented as not actually working in this
--- build, for reasons specific to how vanilla defers scoring). Using
--- Game:update instead -- the same per-frame poll pattern Orion's
--- start-of-round check and the hex_relativistic_jets/Coupon-style
--- "while owned, do X" checks already use successfully in this file --
--- guarantees this runs on some frame well after every file (including
--- consumables.lua's Singularity patch) has finished loading, since the
--- game has to render at least one frame before any of that matters.
-local hex_amplifier_hook_installed = false
-
-local hex_old_game_update_amplifier = Game.update
-
-function Game:update(dt)
-    if not hex_amplifier_hook_installed then
-        hex_amplifier_hook_installed = true
-
-        local hex_old_calculate_joker_amplifier = Card.calculate_joker
-
-        Card.calculate_joker = function(self, context)
-            if not (self.ability and SMODS.find_card("j_" .. mod.prefix .. "_amplifier")[1]) then
-                return hex_old_calculate_joker_amplifier(self, context)
-            end
-
-            local ok, err = pcall(function()
-                local a = hex_amplifier_a()
-
-                local snapshot = {}
-                hex_singularity_collect(self.ability, 1, "", snapshot)
-
-                local ret = hex_old_calculate_joker_amplifier(self, context)
-
-                hex_amplifier_rewrite(self, snapshot, a)
-
-                return ret
-            end)
-
-            if not ok then
-                print("AMPLIFIER ERROR: " .. tostring(err)) -- TEMP DEBUG
-                return hex_old_calculate_joker_amplifier(self, context)
-            end
-
-            return ok and err -- pcall's second return is the wrapped function's return value when ok
-        end
-    end
-
-    return hex_old_game_update_amplifier(self, dt)
-end
 
 
 
@@ -7867,7 +7726,6 @@ SMODS.Joker{
 
             return {
                 Xmult = xmult,
-                message = "=" .. tostring(fx),
                 colour = G.C.MULT,
             }
         end
