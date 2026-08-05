@@ -1513,7 +1513,7 @@ SMODS.Seal{
     },
 
     atlas = "HexEnhancers",
-    pos = { x = 3, y = 4 },
+    pos = { x = 6, y = 4 },
 
     badge_colour = G.C.HEX_GREEN_SEAL,
 
