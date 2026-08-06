@@ -6419,7 +6419,7 @@ local hex_sacrifice_values = {
     [4] = big(20),
     ["hex_mythic"] = big(50),
     ["hex_transcendental"] = big(250),
-    ["hex_divine"] = big(5000),
+    ["hex_divine"] = big(1000),
 }
 
 -- Computes the Hex-point gain for hexing/sacrificing a given Joker card,

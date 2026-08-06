@@ -5615,13 +5615,6 @@ local function hex_sheaf_create_star_card()
 end
 
 
--- Builds the eligible pool fresh each time (Rare-or-lower Jokers, i.e.
--- rarity <= 3, so Legendary and any higher custom rarities are excluded)
--- and creates one as a Negative copy. Same rarity-filtered pool pattern
--- Andromeda/Big Crunch already use elsewhere in this file, respecting
--- Showman for duplicates. No card_limit check, matching Proxima
--- Centauri's own reasoning -- Negative Jokers don't count against the
--- Joker slot limit in vanilla, so there's nothing to gate on.
 local function hex_fermi_method_create_joker()
     local showman_owned = hex_owns_showman()
 
@@ -5629,7 +5622,7 @@ local function hex_fermi_method_create_joker()
     for _, center in pairs(G.P_CENTERS) do
         if center.set == "Joker"
         and type(center.rarity) == "number"
-        and center.rarity <= 3 -- Rare (3) or lower
+        and center.rarity <= 3 -- Rare (3) or lowerW
         and (showman_owned or #SMODS.find_card(center.key) == 0) then
             pool[#pool + 1] = center
         end
@@ -5641,23 +5634,29 @@ local function hex_fermi_method_create_joker()
         trigger = "after",
         delay = 0.2,
         func = function()
-            local chosen = pool[math.random(#pool)]
+            local ok, err = pcall(function()
+                local chosen = pool[math.random(#pool)]
 
-            local new_card = SMODS.create_card({
-                set = "Joker",
-                key = chosen.key,
-                area = G.jokers
-            })
+                local new_card = SMODS.create_card({
+                    set = "Joker",
+                    key = chosen.key,
+                    area = G.jokers
+                })
 
-            new_card:set_edition({ negative = true }, true)
+                new_card:set_edition({ negative = true }, true)
 
-            G.jokers:emplace(new_card)
-            new_card:add_to_deck()
+                G.jokers:emplace(new_card)
+                new_card:add_to_deck()
 
-            card_eval_status_text(new_card, "extra", nil, nil, nil, {
-                message = "FERMI!",
-                colour = G.C.LEGENDARY,
-            })
+                card_eval_status_text(new_card, "extra", nil, nil, nil, {
+                    message = "FERMI!",
+                    colour = G.C.LEGENDARY,
+                })
+            end)
+
+            if not ok then
+                print("[Hex] Fermi Method spawn failed: " .. tostring(err))
+            end
 
             return true
         end
@@ -5678,54 +5677,34 @@ SMODS.Joker{
     },
 
     atlas = "HexJokers",
-    pos = { x = 4, y = 8 }, -- placeholder art slot, same as other undrawn Legendary Jokers
-    soul_pos = { x = 2, y = 9 }, -- placeholder Soul-card art slot
+    pos = { x = 4, y = 8 },
+    soul_pos = { x = 2, y = 9 },
 
     rarity = 4, -- Legendary
     in_pool = hex_in_pool,
     cost = 20,
     unlocked = true,
     discovered = true,
-    blueprint_compat = true,
+    blueprint_compat = false, -- disabled: chained Blueprint copies caused a synchronous freeze scaling with joker count
     eternal_compat = true,
 
     config = {
         extra = {
             last_round = nil,
-            last_round_blueprint = {},
         }
     },
 
     calculate = function(self, card, context)
         if not context.end_of_round then return end
 
-        if context.blueprint then
-            if type(card.ability.extra.last_round_blueprint) ~= "table" then
-                card.ability.extra.last_round_blueprint = {}
-            end
+        if card.ability.extra.last_round ~= G.GAME.round then
+            card.ability.extra.last_round = G.GAME.round
+            hex_fermi_method_create_joker()
 
-            local bp_card = context.blueprint_card
-            local bp_key = bp_card and (bp_card.sort_id or bp_card) or "unknown"
-
-            if card.ability.extra.last_round_blueprint[bp_key] ~= G.GAME.round then
-                card.ability.extra.last_round_blueprint[bp_key] = G.GAME.round
-                hex_fermi_method_create_joker()
-
-                return {
-                    message = "+1 Negative",
-                    colour = G.C.LEGENDARY,
-                }
-            end
-        else
-            if card.ability.extra.last_round ~= G.GAME.round then
-                card.ability.extra.last_round = G.GAME.round
-                hex_fermi_method_create_joker()
-
-                return {
-                    message = "+1 Negative",
-                    colour = G.C.LEGENDARY,
-                }
-            end
+            return {
+                message = "+1 Negative",
+                colour = G.C.LEGENDARY,
+            }
         end
     end,
 }
