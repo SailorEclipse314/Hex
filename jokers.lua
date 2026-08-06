@@ -8556,31 +8556,6 @@ SMODS.Joker{
     eternal_compat = true,
 }
 
-SMODS.Joker{
-    key = "phanes",
-
-    loc_txt = {
-        name = "Phanes",
-        text = {
-            "The {C:ritual}Life{} ritual can",
-            "also bring {C:transcendental}Transcendental{}",
-            "Jokers to life",
-        }
-    },
-
-    rarity = "hex_divine",
-    in_pool = function(self) return false end, -- hidden/unlock-only rarity, like the other Divine jokers
-
-    atlas = "HexJokers",
-    pos = { x = 5, y = 0 }, -- placeholder art slot shared with the other undrawn Divine/Transcendental jokers
-
-    cost = 2e100,
-    unlocked = true,
-    discovered = true,
-    blueprint_compat = false,
-    eternal_compat = true,
-}
-
 
 
 SMODS.Joker{

@@ -2782,7 +2782,24 @@ end
 
 
 
+-- Tracks which Star/Galaxy keys have already been forced into a slot
+-- during the CURRENT pack opening, so a Spectral/Arcana pack with
+-- several card slots can't force the same Star (or Galaxy) card into
+-- two different slots -- each slot rolls its own chance independently
+-- below, with no visibility into what an earlier slot in the same pack
+-- already got. Reset here, in Card:open, which fires exactly once per
+-- pack opened, before any of its card slots are generated.
+HEX_PACK_FORCE_PICKED = { star = {}, galaxy = {} }
 
+local hex_old_card_open_pack_dedupe = Card.open
+
+function Card:open(...)
+    if self.ability and self.ability.set == "Booster" then
+        HEX_PACK_FORCE_PICKED = { star = {}, galaxy = {} }
+    end
+
+    return hex_old_card_open_pack_dedupe(self, ...)
+end
 
 
 
@@ -2811,18 +2828,26 @@ function create_card(_type, area, legendary, _rarity, skip_materialize, soulable
  
     
 
-    -- Galaxy cards get first crack at a Spectral/Tarot pack slot (1 in
-    -- 50 -- rarer than Star's 1 in 33 checked right after it). Both
-    -- gate on `not forced_key`, so whichever roll succeeds first is the
-    -- one that sticks; a slot can never be double-forced by both.
     if (_type == "Spectral" or _type == "Tarot")
     and area == G.pack_cards
     and not forced_key
     and pseudorandom(pseudoseed(mod.prefix .. "_galaxy_pack")) < HEX_GALAXY_PACK_CHANCE then
 
         local galaxies = hex_get_galaxy_centers()
+
+        if not hex_owns_showman() then
+            local filtered = {}
+            for _, center in ipairs(galaxies) do
+                if not HEX_PACK_FORCE_PICKED.galaxy[center.key] then
+                    filtered[#filtered + 1] = center
+                end
+            end
+            if #filtered > 0 then galaxies = filtered end
+        end
+
         if #galaxies > 0 then
             forced_key = galaxies[math.random(#galaxies)].key
+            HEX_PACK_FORCE_PICKED.galaxy[forced_key] = true
         end
     end
 
@@ -2832,8 +2857,20 @@ function create_card(_type, area, legendary, _rarity, skip_materialize, soulable
     and pseudorandom(pseudoseed(mod.prefix .. "_star_pack")) < HEX_STAR_PACK_CHANCE then
 
         local stars = hex_get_star_centers()
+
+        if not hex_owns_showman() then
+            local filtered = {}
+            for _, center in ipairs(stars) do
+                if not HEX_PACK_FORCE_PICKED.star[center.key] then
+                    filtered[#filtered + 1] = center
+                end
+            end
+            if #filtered > 0 then stars = filtered end
+        end
+
         if #stars > 0 then
             forced_key = stars[math.random(#stars)].key
+            HEX_PACK_FORCE_PICKED.star[forced_key] = true
         end
     end
 

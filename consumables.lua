@@ -1372,7 +1372,6 @@ local HEX_STAR_SHOP_CHANCE = 1 / 10
 -- hooking CardArea:emplace directly is the reliable point that catches
 -- a Tarot/Planet/Spectral card no matter how it was actually built.
 local HEX_GALAXY_SHOP_CHANCE = 1 / 10 -- same odds Hypernova uses for Star cards
-
 local old_cardarea_emplace_hypernova = CardArea.emplace
 
 function CardArea:emplace(card, ...)
@@ -1383,6 +1382,31 @@ function CardArea:emplace(card, ...)
         and pseudorandom(pseudoseed(mod.prefix .. "_hypernova_shop")) < HEX_STAR_SHOP_CHANCE then
 
             local stars = hex_get_star_centers()
+
+            -- hex_get_star_centers() only excludes Stars you already OWN
+            -- (unless Showman) -- it has no visibility into what's
+            -- already been placed in this shop's OTHER slots this same
+            -- generation, since each slot rolls independently. Filter
+            -- those out too, same "picked" idea hex_filter_already_picked
+            -- already uses for Star Pack contents elsewhere in this file.
+            if not hex_owns_showman() and self.cards then
+                local already_in_shop = {}
+                for _, c in ipairs(self.cards) do
+                    if c.config and c.config.center and c.config.center.set == "star" then
+                        already_in_shop[c.config.center.key] = true
+                    end
+                end
+
+                local filtered = {}
+                for _, center in ipairs(stars) do
+                    if not already_in_shop[center.key] then
+                        filtered[#filtered + 1] = center
+                    end
+                end
+
+                if #filtered > 0 then stars = filtered end
+            end
+
             if #stars > 0 then
                 local chosen_key = stars[math.random(#stars)].key
                 local chosen_center = G.P_CENTERS[chosen_key]
@@ -1393,7 +1417,7 @@ function CardArea:emplace(card, ...)
                 end
             end
 
-        -- NEW: Gravitational Waves -- same injection, drawing from the
+        -- Gravitational Waves -- same injection, drawing from the
         -- Galaxy pool instead. `elseif` so a single slot never gets
         -- double-forced by both rolls.
         elseif (card.ability.set == "Tarot" or card.ability.set == "Planet" or card.ability.set == "Spectral")
@@ -1401,6 +1425,25 @@ function CardArea:emplace(card, ...)
         and pseudorandom(pseudoseed(mod.prefix .. "_grav_waves_shop")) < HEX_GALAXY_SHOP_CHANCE then
 
             local galaxies = hex_get_galaxy_centers()
+
+            if not hex_owns_showman() and self.cards then
+                local already_in_shop = {}
+                for _, c in ipairs(self.cards) do
+                    if c.config and c.config.center and c.config.center.set == "galaxy" then
+                        already_in_shop[c.config.center.key] = true
+                    end
+                end
+
+                local filtered = {}
+                for _, center in ipairs(galaxies) do
+                    if not already_in_shop[center.key] then
+                        filtered[#filtered + 1] = center
+                    end
+                end
+
+                if #filtered > 0 then galaxies = filtered end
+            end
+
             if #galaxies > 0 then
                 local chosen_key = galaxies[math.random(#galaxies)].key
                 local chosen_center = G.P_CENTERS[chosen_key]
@@ -7498,10 +7541,6 @@ local hex_life_base_selectable_rarities = {
 
 -- Returns true if the player currently owns at least one copy of the given
 -- Joker key. SMODS.find_card is key-based (mod-safe) and works regardless
--- of edition/eternal/etc state on the card.
-local function hex_life_owns_phanes()
-    return SMODS.find_card and #SMODS.find_card("j_" .. mod.prefix .. "_phanes") > 0
-end
 
 -- Oracle lets rituals be summoned more than once (i.e. bypasses the
 -- "already summoned" bookkeeping in G.FUNCS.create_ritual below).
@@ -7509,16 +7548,10 @@ local function hex_owns_oracle()
     return SMODS.find_card and #SMODS.find_card("j_" .. mod.prefix .. "_oracle") > 0
 end
 
--- Phanes lets the Life ritual also offer Transcendental Jokers, but never
--- Divine or Absolute ones -- those stay locked no matter what.
 local function hex_life_rarity_selectable(rarity)
     if hex_life_base_selectable_rarities[rarity] then
         return true
     end
-    if rarity == "hex_transcendental" and hex_life_owns_phanes() then
-        return true
-    end
-    return false
 end
 
 -- This reuses Balatro's real Collection-screen machinery (the same
