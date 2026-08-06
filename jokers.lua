@@ -7698,16 +7698,18 @@ SMODS.Joker{
 
     calculate = function(self, card, context)
         if context.joker_main and not context.blueprint then
-            local n = (G.GAME and G.GAME.hex_livde_mult) or big(1)
+            local n = (G.GAME and G.GAME.hex_live_mult) or big(1)
 
-            local height = n:sub(big(2.2787667783))
-            local fx = big(10):arrow(2, height)
-            local xmult = fx:div(n)
+            if n:gt(big(5)) then
+                local height = n:sub(big(2.2787667783))
+                local fx = big(10):arrow(2, height)
+                local xmult = fx:div(n)
 
-            return {
-                Xmult = xmult,
-                colour = G.C.MULT,
-            }
+                return {
+                    Xmult = xmult,
+                    colour = G.C.MULT,
+                }
+            end
         end
     end,
 }
