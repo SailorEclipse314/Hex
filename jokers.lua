@@ -8502,7 +8502,7 @@ SMODS.Joker{
 
     config = {
         extra = {
-            eee_mult_gain = big(0.1),
+            eee_per_hex_point = big(0.1),
         }
     },
 
@@ -8512,16 +8512,16 @@ SMODS.Joker{
     -- from the collection screen outside of a run.
     loc_vars = function(self, info_queue, card)
         local hex_points = (G.GAME and G.GAME.hex_points) or big(0)
-        local bonus = hex_points:mul(big(card.ability.extra.eee_mult_gain))
+        local bonus = hex_points:mul(big(card.ability.extra.eee_per_hex_point))
         local xstat = big(1):add(bonus)
 
-        return { vars = { xstat, card.ability.extra.eee_mult_gain } }
+        return { vars = { xstat, card.ability.extra.eee_per_hex_point } }
     end,
 
     calculate = function(self, card, context)
         if context.joker_main then
             local hex_points = G.GAME.hex_points or big(0)
-            local bonus = hex_points:mul(big(card.ability.extra.eee_mult_gain))
+            local bonus = hex_points:mul(big(card.ability.extra.eee_per_hex_point))
             local xstat = big(1):add(bonus)
 
             return {
